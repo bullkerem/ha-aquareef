@@ -54,12 +54,15 @@ SERVICE_SEND_RAW_SCHEMA = vol.Schema(
 
 SERVICE_SET_CHANNELS_SCHEMA = vol.Schema(
     {
-        vol.Optional("uv"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
+        vol.Optional("red"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
+        vol.Optional("green"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
         vol.Optional("royal_blue"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
         vol.Optional("blue"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
         vol.Optional("white"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
-        vol.Optional("red"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
-        vol.Optional("green"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
+        vol.Optional("uv"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
+        vol.Optional("mint"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
+        vol.Optional("cyan"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
+        vol.Optional("violet"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
     }
 )
 
