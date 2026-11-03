@@ -69,6 +69,42 @@ set_channels:
           max: 100
           unit_of_measurement: "%"
 
+apply_preset:
+  name: Hazır Mod veya Efekt Uygula
+  description: Gün Doğumu, Gün Ortası, Gün Batımı, Ay Işığı, Derin Deniz, Mercan Alıştırma veya Fırtına gibi hazır aydınlatma modlarını uygular.
+  fields:
+    preset:
+      name: Aydınlatma Modu
+      description: Seçilecek profil veya efekt
+      required: true
+      selector:
+        select:
+          options:
+            - "Manuel"
+            - "Gün Simülasyonu"
+            - "Gün Doğumu (Sunrise)"
+            - "Gün Ortası (Midday)"
+            - "Gün Batımı (Sunset)"
+            - "Ay Işığı / Gece (Moonlight)"
+            - "Derin Deniz (Deep Blue)"
+            - "Mercan Alıştırma (Acclimation)"
+            - "Mercan Fotoğraf Çekim"
+            - "Bitkili / Tatlı Su"
+            - "Fırtına & Şimşek"
+            - "Bulut Efekti"
+            - "Tam Güç (%100 Test)"
+
+set_simulation:
+  name: 24 Saatlik Gün Simülasyonunu Aç/Kapat
+  description: Doğal resif güneş döngüsünü (08:00 Şafak, 14:00 Zirve Güneş, 20:30 Gün Batımı, 21:30 Ay Işığı) otomatik yönetir.
+  fields:
+    enabled:
+      name: Aktif mi?
+      description: Gün simülasyonu açık veya kapalı
+      required: true
+      selector:
+        boolean:
+
 reboot:
   name: AquaReef Cihazını Yeniden Başlat
   description: Wi-Fi modülünü güvenli şekilde yeniden başlatır.
