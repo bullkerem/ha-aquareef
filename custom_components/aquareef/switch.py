@@ -1,4 +1,5 @@
 """Switch platform for AquaReef day simulation and dynamic effects."""
+
 from __future__ import annotations
 
 import logging
@@ -59,11 +60,11 @@ class AquaReefSimulationSwitch(CoordinatorEntity[AquaReefCoordinator], SwitchEnt
         return self.coordinator.simulation_enabled
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn on day simulation."""
+        """Enable simulation."""
         await self.coordinator.async_set_simulation(True)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn off day simulation."""
+        """Disable simulation."""
         await self.coordinator.async_set_simulation(False)
 
 
@@ -76,7 +77,7 @@ class AquaReefStormSwitch(CoordinatorEntity[AquaReefCoordinator], SwitchEntity):
     def __init__(self, coordinator: AquaReefCoordinator) -> None:
         """Initialize the switch."""
         super().__init__(coordinator)
-        self._attr_name = "Fırtına & Şimşek Efekti"
+        self._attr_name = "Fırtına Efekti"
         self._attr_unique_id = f"{coordinator.mac}_storm_effect_switch"
 
     @property
@@ -88,20 +89,20 @@ class AquaReefStormSwitch(CoordinatorEntity[AquaReefCoordinator], SwitchEntity):
 
     @property
     def is_on(self) -> bool:
-        """Return True if storm is active."""
+        """Return True if storm effect is active."""
         return self.coordinator.storm_enabled
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn on storm effect."""
+        """Enable storm effect."""
         await self.coordinator.async_set_storm(True)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn off storm effect."""
+        """Disable storm effect."""
         await self.coordinator.async_set_storm(False)
 
 
 class AquaReefCloudSwitch(CoordinatorEntity[AquaReefCoordinator], SwitchEntity):
-    """Switch to toggle cloud passing effect."""
+    """Switch to toggle passing cloud effect."""
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:weather-partly-cloudy"
@@ -125,9 +126,9 @@ class AquaReefCloudSwitch(CoordinatorEntity[AquaReefCoordinator], SwitchEntity):
         return self.coordinator.cloud_enabled
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn on cloud effect."""
+        """Enable cloud effect."""
         await self.coordinator.async_set_cloud(True)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn off cloud effect."""
+        """Disable cloud effect."""
         await self.coordinator.async_set_cloud(False)
