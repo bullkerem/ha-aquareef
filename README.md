@@ -1,4 +1,4 @@
-﻿# AquaReef Aquarium Lighting - Home Assistant Integration
+# AquaReef Aquarium Lighting - Home Assistant Integration
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/v/release/bullkerem/ha-aquareef?color=blue)](https://github.com/bullkerem/ha-aquareef/releases)
