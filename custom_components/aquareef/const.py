@@ -1,4 +1,4 @@
-﻿"""Constants for the AquaReef Aquarium Lighting integration."""
+"""Constants for the AquaReef Aquarium Lighting integration."""
 
 DOMAIN = "aquareef"
 
