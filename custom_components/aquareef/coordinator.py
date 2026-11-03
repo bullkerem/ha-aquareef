@@ -1,4 +1,4 @@
-﻿"""DataUpdateCoordinator for AquaReef Aquarium Lighting."""
+"""DataUpdateCoordinator for AquaReef Aquarium Lighting."""
 
 from __future__ import annotations
 
