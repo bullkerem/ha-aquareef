@@ -8,7 +8,6 @@ from typing import Any
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
-    SensorEntityDescription,
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
@@ -37,6 +36,8 @@ async def async_setup_entry(
         AquaReefSignalDbmSensor(coordinator),
         AquaReefIpSensor(coordinator),
         AquaReefMacSensor(coordinator),
+        AquaReefSerialSensor(coordinator),
+        AquaReefWattageSensor(coordinator),
         AquaReefSsidSensor(coordinator),
         AquaReefApSensor(coordinator),
         AquaReefFirmwareSensor(coordinator),
@@ -166,6 +167,40 @@ class AquaReefMacSensor(AquaReefBaseSensor):
     def native_value(self) -> str | None:
         """Return MAC."""
         return self.coordinator.mac
+
+
+class AquaReefSerialSensor(AquaReefBaseSensor):
+    """Device Serial Number Sensor."""
+
+    _attr_icon = "mdi:barcode"
+
+    def __init__(self, coordinator: AquaReefCoordinator) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_name = "Seri Numarası"
+        self._attr_unique_id = f"{coordinator.mac}_serial_number"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return serial number."""
+        return self.coordinator.serial or self.coordinator.data.get("serial") if self.coordinator.data else None
+
+
+class AquaReefWattageSensor(AquaReefBaseSensor):
+    """Device Rated Power Sensor."""
+
+    _attr_icon = "mdi:lightning-bolt"
+
+    def __init__(self, coordinator: AquaReefCoordinator) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_name = "Cihaz Gücü"
+        self._attr_unique_id = f"{coordinator.mac}_wattage"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return rated wattage."""
+        return self.coordinator.wattage or self.coordinator.data.get("wattage") if self.coordinator.data else None
 
 
 class AquaReefSsidSensor(AquaReefBaseSensor):
