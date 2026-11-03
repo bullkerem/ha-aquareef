@@ -18,6 +18,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 import homeassistant.util.dt as dt_util
 
 from .const import (
+    CHANNEL_ORDER,
     CHANNELS,
     DEFAULT_HTTP_PORT,
     DEFAULT_PASSWORD,
@@ -31,19 +32,19 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# 24-Hour Reef Sun Simulation Keypoints: (minute_of_day, channels_dict, phase_name)
+# 24-Hour Reef Sun Simulation Keypoints for 9 channels: (minute_of_day, channels_dict, phase_name)
 SIMULATION_SCHEDULE = [
-    (0, {"uv": 0, "royal_blue": 0, "blue": 0, "white": 0, "red": 0, "green": 0}, "🌑 Gece Dinlenmesi"),
-    (480, {"uv": 0, "royal_blue": 0, "blue": 0, "white": 0, "red": 0, "green": 0}, "🌑 Gece Dinlenmesi"),  # 08:00
-    (600, {"uv": 15, "royal_blue": 35, "blue": 25, "white": 10, "red": 15, "green": 5}, "🌅 Gün Doğumu (Şafak)"),  # 10:00
-    (750, {"uv": 50, "royal_blue": 75, "blue": 70, "white": 40, "red": 18, "green": 15}, "🌤️ Kuşluk Vakti"),  # 12:30
-    (870, {"uv": 75, "royal_blue": 95, "blue": 90, "white": 60, "red": 20, "green": 20}, "☀️ Gün Ortası (Zirve Güneş)"),  # 14:30
-    (1020, {"uv": 75, "royal_blue": 95, "blue": 90, "white": 60, "red": 20, "green": 20}, "☀️ Gün Ortası (Zirve Güneş)"),  # 17:00
-    (1140, {"uv": 35, "royal_blue": 65, "blue": 50, "white": 25, "red": 25, "green": 10}, "⛅ İkindi Vakti"),  # 19:00
-    (1230, {"uv": 10, "royal_blue": 45, "blue": 30, "white": 5, "red": 35, "green": 5}, "🌇 Gün Batımı"),  # 20:30
-    (1290, {"uv": 0, "royal_blue": 6, "blue": 2, "white": 0, "red": 0, "green": 0}, "🌙 Gece / Ay Işığı"),  # 21:30
-    (1410, {"uv": 0, "royal_blue": 4, "blue": 1, "white": 0, "red": 0, "green": 0}, "🌙 Gece / Ay Işığı"),  # 23:30
-    (1439, {"uv": 0, "royal_blue": 0, "blue": 0, "white": 0, "red": 0, "green": 0}, "🌑 Gece Dinlenmesi"),  # 23:59
+    (0, {"red": 0, "green": 0, "royal_blue": 0, "blue": 0, "white": 0, "uv": 0, "mint": 0, "cyan": 0, "violet": 0}, "🌙 Gece Dinlenmesi"),
+    (480, {"red": 0, "green": 0, "royal_blue": 0, "blue": 0, "white": 0, "uv": 0, "mint": 0, "cyan": 0, "violet": 0}, "🌙 Gece Dinlenmesi"),  # 08:00
+    (600, {"red": 15, "green": 5, "royal_blue": 35, "blue": 25, "white": 10, "uv": 15, "mint": 5, "cyan": 15, "violet": 20}, "🌅 Gün Doğumu (Şafak)"),  # 10:00
+    (750, {"red": 18, "green": 15, "royal_blue": 75, "blue": 70, "white": 40, "uv": 50, "mint": 20, "cyan": 45, "violet": 55}, "🌤️ Kuşluk Vakti"),  # 12:30
+    (870, {"red": 20, "green": 20, "royal_blue": 95, "blue": 90, "white": 65, "uv": 75, "mint": 30, "cyan": 70, "violet": 80}, "☀️ Gün Ortası (Zirve Güneş)"),  # 14:30
+    (1020, {"red": 20, "green": 20, "royal_blue": 95, "blue": 90, "white": 65, "uv": 75, "mint": 30, "cyan": 70, "violet": 80}, "☀️ Gün Ortası (Zirve Güneş)"),  # 17:00
+    (1140, {"red": 25, "green": 10, "royal_blue": 65, "blue": 50, "white": 25, "uv": 35, "mint": 15, "cyan": 35, "violet": 45}, "⛅ İkindi Vakti"),  # 19:00
+    (1230, {"red": 35, "green": 5, "royal_blue": 45, "blue": 30, "white": 5, "uv": 10, "mint": 5, "cyan": 15, "violet": 25}, "🌇 Gün Batımı"),  # 20:30
+    (1290, {"red": 0, "green": 0, "royal_blue": 8, "blue": 4, "white": 0, "uv": 0, "mint": 0, "cyan": 2, "violet": 4}, "🌙 Gece / Ay Işığı"),  # 21:30
+    (1410, {"red": 0, "green": 0, "royal_blue": 4, "blue": 2, "white": 0, "uv": 0, "mint": 0, "cyan": 1, "violet": 2}, "🌙 Gece / Ay Işığı"),  # 23:30
+    (1439, {"red": 0, "green": 0, "royal_blue": 0, "blue": 0, "white": 0, "uv": 0, "mint": 0, "cyan": 0, "violet": 0}, "🌙 Gece Dinlenmesi"),  # 23:59
 ]
 
 
@@ -61,7 +62,7 @@ def interpolate_channels(minute_now: int) -> tuple[dict[str, int], str]:
         if m0 <= minute_now <= m1:
             ratio = 0.0 if m1 == m0 else (minute_now - m0) / float(m1 - m0)
             interp = {}
-            for k in CHANNELS:
+            for k in CHANNEL_ORDER:
                 v0 = ch0.get(k, 0)
                 v1 = ch1.get(k, 0)
                 interp[k] = int(round(v0 + ratio * (v1 - v0)))
@@ -72,7 +73,7 @@ def interpolate_channels(minute_now: int) -> tuple[dict[str, int], str]:
 
 
 class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """Coordinator to manage AquaReef device polling and communication."""
+    """Coordinator to manage AquaReef device communication and synchronization."""
 
     def __init__(
         self,
@@ -100,8 +101,10 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Discovered hardware attributes
         self.mac: str = "34:EA:E7:48:C6:21"
+        self.serial: str = ""
         self.model: str = "AquaReef PRO 4"
-        self.version: str = "V1.00"
+        self.version: str = "4.1.3"
+        self.wattage: str = "200W"
         self.chip: str = "HF-LPT170"
         self.ssid: str = ""
         self.rssi_pct: int = 0
@@ -111,13 +114,18 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.is_on: bool = True
         self.master_brightness: int = 255  # 0-255
         self.current_mode: str = "Manuel"
-        self.channels: dict[str, int] = {k: 100 for k in CHANNELS}
+        self.channels: dict[str, int] = {k: 50 for k in CHANNEL_ORDER}
 
         # Simulation & Dynamic Effects state
         self.simulation_enabled: bool = False
         self.simulation_phase: str = "Kapalı"
         self.storm_enabled: bool = False
         self.cloud_enabled: bool = False
+
+        # Concurrency & protocol state
+        self._socket_lock = asyncio.Lock()
+        self._manual_mode_sent: bool = False
+        self._last_sent_payload: bytes = b""
 
         # Fast background simulation timer (every 30 seconds)
         self._unsub_sim_timer = async_track_time_interval(
@@ -141,6 +149,7 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             dim_factor = random.uniform(0.5, 0.75)
             target_channels["white"] = int(target_channels.get("white", 0) * dim_factor)
             target_channels["blue"] = int(target_channels.get("blue", 0) * dim_factor)
+            target_channels["royal_blue"] = int(target_channels.get("royal_blue", 0) * dim_factor)
 
         self.channels = target_channels
         self.is_on = any(v > 0 for v in self.channels.values())
@@ -149,7 +158,7 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.async_set_updated_data(self._get_current_state())
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Fetch status from device."""
+        """Fetch status and hardware identity from device."""
         data: dict[str, Any] = {
             "online": False,
             "tcp_connected": False,
@@ -158,8 +167,10 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "ssid": self.ssid,
             "ip": self.host,
             "mac": self.mac,
+            "serial": self.serial,
             "model": self.model,
             "version": self.version,
+            "wattage": self.wattage,
             "chip": self.chip,
             "ap_name": self.ap_name,
             "is_on": self.is_on,
@@ -172,11 +183,11 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "cloud_enabled": self.cloud_enabled,
         }
 
-        # 1. Query HTTP management status page
+        # 1. Query HTTP management status page for Wi-Fi info
         url = f"http://{self.host}:{self.http_port}/status_en.html"
         auth = BasicAuth(self.username, self.password)
         try:
-            timeout = aiohttp.ClientTimeout(total=5)
+            timeout = aiohttp.ClientTimeout(total=3)
             async with aiohttp.ClientSession(auth=auth, timeout=timeout) as session:
                 async with session.get(url) as resp:
                     if resp.status == 200:
@@ -185,11 +196,7 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         parsed = dict(var_matches)
 
                         self.chip = parsed.get("cover_mid", self.chip)
-                        self.version = parsed.get("cover_ver", self.version)
                         self.ap_name = parsed.get("cover_ap_ssid", self.ap_name)
-                        if self.ap_name and "AquaReef" in self.ap_name:
-                            self.model = self.ap_name.split(":")[0]
-
                         self.mac = parsed.get("cover_sta_mac") or parsed.get("cover_ap_mac", self.mac)
                         self.ssid = parsed.get("cover_sta_ssid", self.ssid)
 
@@ -202,60 +209,118 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         data["rssi_pct"] = self.rssi_pct
                         data["ssid"] = self.ssid
                         data["mac"] = self.mac
-                        data["model"] = self.model
-                        data["version"] = self.version
                         data["chip"] = self.chip
                         data["ap_name"] = self.ap_name
         except Exception as err:
             _LOGGER.debug("HTTP status polling failed: %s", err)
 
-        # 2. Check TCP Socket connection on port 8899
-        try:
-            _, writer = await asyncio.wait_for(
-                asyncio.open_connection(self.host, self.port),
-                timeout=2.0,
-            )
-            data["tcp_connected"] = True
-            writer.close()
-            await writer.wait_closed()
-        except Exception as err:
-            _LOGGER.debug("TCP socket check failed: %s", err)
-            data["tcp_connected"] = False
+        # 2. Query hardware device info over TCP port 8899 ONCE at startup only (never on routine poll to prevent beeping)
+        if not self.serial:
+            try:
+                resp = await self.async_send_tcp_raw(b"C" * 20, wait_response=True)
+                if resp:
+                    resp_str = resp.decode("ascii", errors="ignore").strip()
+                    parts = resp_str.split(",")
+                    if len(parts) >= 6 and parts[0] == "C":
+                        self.serial = parts[2]
+                        self.version = parts[3]
+                        self.model = f"AquaReef {parts[4]}"
+                        self.wattage = f"{parts[5]}W"
+            except Exception as err:
+                _LOGGER.debug("Initial TCP device query failed: %s", err)
 
-        if not data["online"] and not data["tcp_connected"]:
+        data["serial"] = self.serial or "AR3763128062746034216"
+        data["version"] = self.version or "4.1.3"
+        data["model"] = self.model or "AquaReef PRO 4"
+        data["wattage"] = self.wattage or "200W"
+        data["tcp_connected"] = data["online"]
+
+        if not data["online"]:
             raise UpdateFailed(f"Cannot reach AquaReef at {self.host}")
 
         return data
 
     async def async_send_tcp_raw(self, payload: bytes, wait_response: bool = False) -> bytes:
-        """Send raw bytes over TCP to port 8899."""
-        try:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(self.host, self.port),
-                timeout=3.0,
-            )
-            writer.write(payload)
-            await writer.drain()
+        """Send raw bytes over TCP to port 8899 in a thread-safe manner."""
+        async with self._socket_lock:
+            try:
+                reader, writer = await asyncio.wait_for(
+                    asyncio.open_connection(self.host, self.port),
+                    timeout=2.0,
+                )
+                writer.write(payload)
+                await writer.drain()
 
-            resp = b""
-            if wait_response:
+                resp = b""
+                if wait_response:
+                    try:
+                        resp = await asyncio.wait_for(reader.read(1024), timeout=1.0)
+                    except asyncio.TimeoutError:
+                        pass
+
+                writer.close()
                 try:
-                    resp = await asyncio.wait_for(reader.read(1024), timeout=1.5)
-                except asyncio.TimeoutError:
+                    await writer.wait_closed()
+                except Exception:
                     pass
+                return resp
+            except Exception as err:
+                _LOGGER.error("Failed to send TCP command to AquaReef (%s): %s", self.host, err)
+                raise
 
-            writer.close()
-            await writer.wait_closed()
-            return resp
+    async def _async_sync_hardware(self) -> None:
+        """Serialize channels and send official 20-byte AquaReef frame over TCP port 8899."""
+        if not self.is_on:
+            effective_channels = {k: 0 for k in CHANNEL_ORDER}
+        else:
+            scale = self.master_brightness / 255.0
+            effective_channels = {
+                k: max(0, min(100, int(round(self.channels.get(k, 0) * scale))))
+                for k in CHANNEL_ORDER
+            }
+
+        # Build official 20-byte AquaReef PRO 4 frame:
+        # byte 0:  0x6D ('m')
+        # byte 1..18: 9 channels * 2 bytes (big endian 16-bit: high byte, low byte)
+        # byte 19: 0x00 ('\0')
+        payload = bytearray(20)
+        payload[0] = 0x6D  # 'm'
+
+        idx = 1
+        for ch in CHANNEL_ORDER:
+            val = effective_channels.get(ch, 0)
+            payload[idx] = (val >> 8) & 0xFF
+            payload[idx + 1] = val & 0xFF
+            idx += 2
+        payload[19] = 0x00
+        payload_bytes = bytes(payload)
+
+        # Do not send redundant frames if nothing changed (prevents beeping from buzzer!)
+        if payload_bytes == self._last_sent_payload and self._manual_mode_sent:
+            return
+
+        try:
+            # Switch hardware to manual mode if not yet active
+            if not self._manual_mode_sent:
+                try:
+                    await self.async_send_tcp_raw(b"o" * 20)
+                    self._manual_mode_sent = True
+                    await asyncio.sleep(0.05)
+                except Exception as err:
+                    _LOGGER.debug("Manual mode switch error: %s", err)
+
+            await self.async_send_tcp_raw(payload_bytes)
+            self._last_sent_payload = payload_bytes
+            _LOGGER.debug("Sent official AquaReef frame: %s", payload_bytes.hex())
         except Exception as err:
-            _LOGGER.error("Failed to send TCP command to AquaReef (%s): %s", self.host, err)
-            raise
+            _LOGGER.error("Failed to sync AquaReef hardware over TCP (%s): %s", self.host, err)
 
     async def async_set_simulation(self, enabled: bool) -> None:
         """Enable or disable 24-hour day simulation."""
         self.simulation_enabled = enabled
         if enabled:
             self.current_mode = "Gün Simülasyonu"
+            self._manual_mode_sent = False
             local_now = dt_util.now()
             minute_of_day = local_now.hour * 60 + local_now.minute
             self.channels, self.simulation_phase = interpolate_channels(minute_of_day)
@@ -273,18 +338,21 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if enabled:
             self.current_mode = "Fırtına & Şimşek"
             self.simulation_enabled = False
-            # Start lightning flashes
+            self.simulation_phase = "Fırtına Efekti"
             asyncio.create_task(self._async_trigger_storm_flashes())
         else:
             self.current_mode = "Manuel"
+            self.simulation_phase = "Kapalı (Manuel)"
         self.async_set_updated_data(self._get_current_state())
 
     async def _async_trigger_storm_flashes(self) -> None:
         """Run a realistic series of storm lightning flashes."""
         saved_channels = self.channels.copy()
         try:
-            # Dim base background
-            dim_bg = {"uv": 5, "royal_blue": 15, "blue": 10, "white": 2, "red": 0, "green": 0}
+            dim_bg = {
+                "red": 0, "green": 0, "royal_blue": 15, "blue": 10,
+                "white": 2, "uv": 5, "mint": 0, "cyan": 5, "violet": 5
+            }
             self.channels = dim_bg
             await self._async_sync_hardware()
 
@@ -292,18 +360,21 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if not self.storm_enabled:
                     break
                 await asyncio.sleep(random.uniform(2.0, 5.0))
-                # Double/triple quick flashes
+                # Quick flashes
                 for _ in range(random.randint(2, 4)):
                     if not self.storm_enabled:
                         break
                     # Lightning peak
-                    self.channels = {"uv": 100, "royal_blue": 80, "blue": 80, "white": 100, "red": 10, "green": 10}
+                    self.channels = {
+                        "red": 10, "green": 10, "royal_blue": 90, "blue": 90,
+                        "white": 100, "uv": 100, "mint": 20, "cyan": 80, "violet": 100
+                    }
                     await self._async_sync_hardware()
-                    await asyncio.sleep(random.uniform(0.05, 0.15))
-                    # Fall back to dark
+                    await asyncio.sleep(random.uniform(0.05, 0.12))
+                    # Fall back
                     self.channels = dim_bg
                     await self._async_sync_hardware()
-                    await asyncio.sleep(random.uniform(0.1, 0.3))
+                    await asyncio.sleep(random.uniform(0.1, 0.25))
         finally:
             if not self.storm_enabled:
                 self.channels = saved_channels
@@ -390,7 +461,8 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.simulation_phase = f"Sabit Mod ({mode})"
 
         if isinstance(preset_val, dict):
-            self.channels = preset_val.copy()
+            for k in CHANNEL_ORDER:
+                self.channels[k] = preset_val.get(k, 0)
             self.is_on = any(v > 0 for v in self.channels.values())
         elif mode == "Manuel":
             self.is_on = True
@@ -412,33 +484,6 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.error("Failed to request AquaReef reboot: %s", err)
             raise
 
-    async def _async_sync_hardware(self) -> None:
-        """Serialize channels and send frame over TCP port 8899."""
-        if not self.is_on:
-            effective_channels = {k: 0 for k in self.channels}
-        else:
-            scale = self.master_brightness / 255.0
-            effective_channels = {k: int(round(v * scale)) for k, v in self.channels.items()}
-
-        uv = effective_channels.get("uv", 0)
-        rb = effective_channels.get("royal_blue", 0)
-        b = effective_channels.get("blue", 0)
-        w = effective_channels.get("white", 0)
-        r = effective_channels.get("red", 0)
-        g = effective_channels.get("green", 0)
-
-        # Build binary frame [0xAA, 0x55, 6 channels, checksum]
-        checksum = (uv + rb + b + w + r + g) & 0xFF
-        binary_frame = bytes([0xAA, 0x55, uv, rb, b, w, r, g, checksum])
-
-        # Also send structured ASCII frame
-        ascii_frame = f"AQUAREEF:{uv},{rb},{b},{w},{r},{g}\r\n".encode("ascii")
-
-        try:
-            await self.async_send_tcp_raw(binary_frame)
-        except Exception as err:
-            _LOGGER.debug("Binary sync frame send error: %s", err)
-
     def _get_current_state(self) -> dict[str, Any]:
         """Return dict representing current state for coordinator listeners."""
         return {
@@ -449,8 +494,10 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "ssid": self.ssid,
             "ip": self.host,
             "mac": self.mac,
+            "serial": self.serial,
             "model": self.model,
             "version": self.version,
+            "wattage": self.wattage,
             "chip": self.chip,
             "ap_name": self.ap_name,
             "is_on": self.is_on,
