@@ -4,9 +4,9 @@ send_raw_command:
   fields:
     command:
       name: Komut
-      description: Gönderilecek komut verisi (örneğin "AA55646464646464A4" veya "STATUS").
+      description: Gönderilecek komut verisi (örneğin "6D00320032003200320032003200320032003200" veya "oooooooooooooooooooo").
       required: true
-      example: "AA55646464646464A4"
+      example: "6D00320032003200320032003200320032003200"
       selector:
         text:
     is_hex:
@@ -18,11 +18,19 @@ send_raw_command:
 
 set_channels:
   name: Renk Kanallarını Ayarla
-  description: AquaReef üzerindeki tüm spektrum kanallarının yüzdesini (0-100) tek bir komutla ayarlar.
+  description: AquaReef PRO 4 üzerindeki 9 spektrum kanalının yüzdesini (%0 - %100) ayarlar.
   fields:
-    uv:
-      name: UV / Mor
-      description: Kanal 1 seviyesi (%0 - %100)
+    red:
+      name: Kırmızı (Red)
+      description: Kırmızı LED kanalı (%0 - %100)
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    green:
+      name: Yeşil / Amber
+      description: Yeşil / Amber LED kanalı (%0 - %100)
       selector:
         number:
           min: 0
@@ -30,39 +38,55 @@ set_channels:
           unit_of_measurement: "%"
     royal_blue:
       name: Royal Blue
-      description: Kanal 2 seviyesi (%0 - %100)
+      description: Royal Blue (Koyu Mavi) LED kanalı (%0 - %100)
       selector:
         number:
           min: 0
           max: 100
           unit_of_measurement: "%"
     blue:
-      name: Mavi
-      description: Kanal 3 seviyesi (%0 - %100)
+      name: Mavi (Blue)
+      description: Açık Mavi LED kanalı (%0 - %100)
       selector:
         number:
           min: 0
           max: 100
           unit_of_measurement: "%"
     white:
-      name: Beyaz
-      description: Kanal 4 seviyesi (%0 - %100)
+      name: Beyaz (White)
+      description: Soğuk Beyaz LED kanalı (%0 - %100)
       selector:
         number:
           min: 0
           max: 100
           unit_of_measurement: "%"
-    red:
-      name: Kırmızı
-      description: Kanal 5 seviyesi (%0 - %100)
+    uv:
+      name: UV / Mor
+      description: UV LED kanalı (%0 - %100)
       selector:
         number:
           min: 0
           max: 100
           unit_of_measurement: "%"
-    green:
-      name: Yeşil
-      description: Kanal 6 seviyesi (%0 - %100)
+    mint:
+      name: Nane (Mint)
+      description: Mint Yeşili LED kanalı (%0 - %100)
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    cyan:
+      name: Turkuaz (Cyan)
+      description: Camgöbeği / Turkuaz LED kanalı (%0 - %100)
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    violet:
+      name: Menekşe (Violet)
+      description: Menekşe / Koyu Mor LED kanalı (%0 - %100)
       selector:
         number:
           min: 0
@@ -96,7 +120,7 @@ apply_preset:
 
 set_simulation:
   name: 24 Saatlik Gün Simülasyonunu Aç/Kapat
-  description: Doğal resif güneş döngüsünü (08:00 Şafak, 14:00 Zirve Güneş, 20:30 Gün Batımı, 21:30 Ay Işığı) otomatik yönetir.
+  description: Doğal resif güneş döngüsünü otomatik yönetir.
   fields:
     enabled:
       name: Aktif mi?
