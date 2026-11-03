@@ -15,7 +15,7 @@
       }
     },
     "error": {
-      "cannot_connect": "Cihaza bağlanılamadı. Lütfen IP adresinin (192.168.8.90) ve portun doğru olduğundan emin olun."
+      "cannot_connect": "Cihaza bağlanılamadı. Lütfen IP adresinin ve portun doğru olduğundan emin olun."
     },
     "abort": {
       "already_configured": "Bu cihaz zaten Home Assistant'a eklenmiş durumda."
