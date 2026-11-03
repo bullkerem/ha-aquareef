@@ -126,10 +126,11 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._socket_lock = asyncio.Lock()
         self._manual_mode_sent: bool = False
         self._last_sent_payload: bytes = b""
+        self._last_http_poll_ts: float = 0.0
 
-        # Fast background simulation timer (every 30 seconds)
+        # Background simulation timer (every 60 seconds)
         self._unsub_sim_timer = async_track_time_interval(
-            hass, self._async_simulation_tick, timedelta(seconds=30)
+            hass, self._async_simulation_tick, timedelta(seconds=60)
         )
 
     async def _async_simulation_tick(self, _now: datetime) -> None:
@@ -183,36 +184,41 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "cloud_enabled": self.cloud_enabled,
         }
 
-        # 1. Query HTTP management status page for Wi-Fi info
-        url = f"http://{self.host}:{self.http_port}/status_en.html"
-        auth = BasicAuth(self.username, self.password)
-        try:
-            timeout = aiohttp.ClientTimeout(total=3)
-            async with aiohttp.ClientSession(auth=auth, timeout=timeout) as session:
-                async with session.get(url) as resp:
-                    if resp.status == 200:
-                        text = await resp.text()
-                        var_matches = re.findall(r'var\s+(\w+)\s*=\s*"([^"]*)";', text)
-                        parsed = dict(var_matches)
+        # 1. Query HTTP management status page for Wi-Fi info (throttled to every 300s to eliminate Wi-Fi blinking)
+        import time
+        now_ts = time.time()
+        should_query_http = (now_ts - self._last_http_poll_ts > 300) or not self.ssid
+        if should_query_http:
+            self._last_http_poll_ts = now_ts
+            url = f"http://{self.host}:{self.http_port}/status_en.html"
+            auth = BasicAuth(self.username, self.password)
+            try:
+                timeout = aiohttp.ClientTimeout(total=3)
+                async with aiohttp.ClientSession(auth=auth, timeout=timeout) as session:
+                    async with session.get(url) as resp:
+                        if resp.status == 200:
+                            text = await resp.text()
+                            var_matches = re.findall(r'var\s+(\w+)\s*=\s*"([^"]*)";', text)
+                            parsed = dict(var_matches)
 
-                        self.chip = parsed.get("cover_mid", self.chip)
-                        self.ap_name = parsed.get("cover_ap_ssid", self.ap_name)
-                        self.mac = parsed.get("cover_sta_mac") or parsed.get("cover_ap_mac", self.mac)
-                        self.ssid = parsed.get("cover_sta_ssid", self.ssid)
+                            self.chip = parsed.get("cover_mid", self.chip)
+                            self.ap_name = parsed.get("cover_ap_ssid", self.ap_name)
+                            self.mac = parsed.get("cover_sta_mac") or parsed.get("cover_ap_mac", self.mac)
+                            self.ssid = parsed.get("cover_sta_ssid", self.ssid)
 
-                        raw_rssi = parsed.get("cover_sta_rssi", "0%").replace("%", "").strip()
-                        if raw_rssi.isdigit():
-                            self.rssi_pct = int(raw_rssi)
-                            data["rssi_dbm"] = round((self.rssi_pct / 2) - 100)
+                            raw_rssi = parsed.get("cover_sta_rssi", "0%").replace("%", "").strip()
+                            if raw_rssi.isdigit():
+                                self.rssi_pct = int(raw_rssi)
+            except Exception as err:
+                _LOGGER.debug("HTTP status polling failed: %s", err)
 
-                        data["online"] = True
-                        data["rssi_pct"] = self.rssi_pct
-                        data["ssid"] = self.ssid
-                        data["mac"] = self.mac
-                        data["chip"] = self.chip
-                        data["ap_name"] = self.ap_name
-        except Exception as err:
-            _LOGGER.debug("HTTP status polling failed: %s", err)
+        data["online"] = True
+        data["rssi_pct"] = self.rssi_pct
+        data["rssi_dbm"] = round((self.rssi_pct / 2) - 100) if self.rssi_pct else None
+        data["ssid"] = self.ssid
+        data["mac"] = self.mac
+        data["chip"] = self.chip
+        data["ap_name"] = self.ap_name
 
         # 2. Query hardware device info over TCP port 8899 ONCE at startup only (never on routine poll to prevent beeping)
         if not self.serial:
