@@ -63,7 +63,7 @@ class AquaReefMasterLight(CoordinatorEntity[AquaReefCoordinator], LightEntity):
             name=self.coordinator.device_name,
             manufacturer="AquaReef (Alstek Elektronik)",
             model=self.coordinator.model or "AquaReef PRO 4",
-            sw_version=self.coordinator.version or "V1.00",
+            sw_version=self.coordinator.version or "4.1.3",
             configuration_url=f"http://{self.coordinator.host}",
         )
 
@@ -85,6 +85,8 @@ class AquaReefMasterLight(CoordinatorEntity[AquaReefCoordinator], LightEntity):
             "channels": self.coordinator.channels,
             "ip_address": self.coordinator.host,
             "mac_address": self.coordinator.mac,
+            "serial_number": self.coordinator.serial,
+            "wattage": self.coordinator.wattage,
         }
 
     async def async_turn_on(self, **kwargs: Any) -> None:
