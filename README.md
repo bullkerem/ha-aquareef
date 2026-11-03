@@ -14,20 +14,22 @@ Works **100% locally** across your local Wi-Fi network without any cloud depende
 
 - **Yerel ve Hızlı Kontrol (100% Local):** Buluta ihtiyaç duymadan doğrudan yerel ağ üzerinden (TCP Port 8899 ve HTTP API) haberleşir.
 - **Ana Armatür Kontrolü (Master Fixture):** Açma, kapatma, genel parlaklık (dimmer) kontrolü.
-- **6 Bağımsız Spektrum Kanalı (Individual Channels):**
+- **9 Bağımsız Spektrum Kanalı (9 Individual PWM Channels):**
   - 🟣 **Kanal 1:** UV / Mor (395-420nm)
   - 🌊 **Kanal 2:** Royal Blue (450nm)
   - 🔷 **Kanal 3:** Blue (470nm)
-  - ☀️ **Kanal 4:** White (Beyaz)
+  - 🌌 **Kanal 4:** Deep Blue (430-440nm)
   - 🔴 **Kanal 5:** Red (Kırmızı 660nm)
-  - 🟢 **Kanal 6:** Green (Yeşil / Cyan 520nm)
-- **Çalışma Modları / Hazır Efektler:**
-  - `Manuel`
-  - `Gün Simülasyonu`
-  - `Ay Işığı / Gece`
-  - `Bulut Efekti`
-  - `Fırtına & Şimşek`
-  - `Mercan Alıştırma (Aklimatizasyon)`
+  - 🟢 **Kanal 6:** Green (Yeşil 520nm)
+  - 🟡 **Kanal 7:** Warm White (Sıcak Beyaz 3000K)
+  - ⚪ **Kanal 8:** Cold White (Soğuk Beyaz)
+  - 🌙 **Kanal 9:** Moonlight (Ayışığı)
+- **Tersine Mühendislik İle Çözülmüş 20-Bayt TCP Protokolü:**
+  - Armatürün donanımsal 20-baytlık TCP ikili protokolü (`0x6D` veri + 9x 16-bit PWM + `0x6F` manuel geçiş) tam olarak desteklenir.
+- **Hazır Simülasyon ve Renk Efektleri (One-Click Presets):**
+  - `Gündoğumu`, `Öğle`, `Günbatımı`, `Ayışığı`
+  - `Mercan Büyüme`, `Floresan Pop`, `Beyaz Resif`, `SPS Derin Deniz`
+  - `Manuel` ve `Doğal Resif` modları
 - **Tanılama ve Durum Sensörleri:**
   - Wi-Fi Sinyal Gücü (% ve dBm)
   - IP ve MAC Adresi
