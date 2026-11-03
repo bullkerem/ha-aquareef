@@ -1,4 +1,4 @@
-﻿"""Select platform for AquaReef Aquarium Lighting modes and presets."""
+"""Select platform for AquaReef Aquarium Lighting modes and presets."""
 
 from __future__ import annotations
 
