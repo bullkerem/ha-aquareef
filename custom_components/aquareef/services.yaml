@@ -1,4 +1,4 @@
-﻿send_raw_command:
+send_raw_command:
   name: Ham TCP Komutu Gönder
   description: AquaReef LED kontrolcüsüne port 8899 üzerinden doğrudan HEX veya ASCII komut gönderir.
   fields:
