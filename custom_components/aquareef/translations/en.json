@@ -1,0 +1,24 @@
+﻿{
+  "config": {
+    "step": {
+      "user": {
+        "title": "AquaReef Aquarium Lighting",
+        "description": "Enter the IP address and communication port of your AquaReef LED fixture.",
+        "data": {
+          "host": "IP Address",
+          "port": "TCP Port (Default: 8899)",
+          "http_port": "HTTP Port (Default: 80)",
+          "username": "Username (Default: admin)",
+          "password": "Password (Default: admin)",
+          "name": "Device Name"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to device. Please verify IP address and port."
+    },
+    "abort": {
+      "already_configured": "Device is already configured."
+    }
+  }
+}
