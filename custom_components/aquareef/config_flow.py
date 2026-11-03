@@ -1,4 +1,4 @@
-﻿"""Config flow for AquaReef Aquarium Lighting integration."""
+"""Config flow for AquaReef Aquarium Lighting integration."""
 
 from __future__ import annotations
 
