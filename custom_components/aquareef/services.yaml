@@ -1,0 +1,74 @@
+﻿send_raw_command:
+  name: Ham TCP Komutu Gönder
+  description: AquaReef LED kontrolcüsüne port 8899 üzerinden doğrudan HEX veya ASCII komut gönderir.
+  fields:
+    command:
+      name: Komut
+      description: Gönderilecek komut verisi (örneğin "AA55646464646464A4" veya "STATUS").
+      required: true
+      example: "AA55646464646464A4"
+      selector:
+        text:
+    is_hex:
+      name: HEX Formatında mı?
+      description: Veri HEX formatında gönderilecekse Açık, düz metin/ASCII ise Kapalı seçin.
+      default: true
+      selector:
+        boolean:
+
+set_channels:
+  name: Renk Kanallarını Ayarla
+  description: AquaReef üzerindeki tüm spektrum kanallarının yüzdesini (0-100) tek bir komutla ayarlar.
+  fields:
+    uv:
+      name: UV / Mor
+      description: Kanal 1 seviyesi (%0 - %100)
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    royal_blue:
+      name: Royal Blue
+      description: Kanal 2 seviyesi (%0 - %100)
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    blue:
+      name: Mavi
+      description: Kanal 3 seviyesi (%0 - %100)
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    white:
+      name: Beyaz
+      description: Kanal 4 seviyesi (%0 - %100)
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    red:
+      name: Kırmızı
+      description: Kanal 5 seviyesi (%0 - %100)
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    green:
+      name: Yeşil
+      description: Kanal 6 seviyesi (%0 - %100)
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+
+reboot:
+  name: AquaReef Cihazını Yeniden Başlat
+  description: Wi-Fi modülünü güvenli şekilde yeniden başlatır.
