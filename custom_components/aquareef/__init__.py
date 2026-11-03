@@ -25,9 +25,12 @@ from .const import (
     DEFAULT_PORT,
     DEFAULT_USERNAME,
     DOMAIN,
+    PRESET_MODES,
+    SERVICE_APPLY_PRESET,
     SERVICE_REBOOT,
     SERVICE_SEND_RAW,
     SERVICE_SET_CHANNELS,
+    SERVICE_SET_SIMULATION,
 )
 from .coordinator import AquaReefCoordinator
 
@@ -38,6 +41,7 @@ PLATFORMS: list[Platform] = [
     Platform.SENSOR,
     Platform.SELECT,
     Platform.BUTTON,
+    Platform.SWITCH,
 ]
 
 # Service Schemas
@@ -56,6 +60,18 @@ SERVICE_SET_CHANNELS_SCHEMA = vol.Schema(
         vol.Optional("white"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
         vol.Optional("red"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
         vol.Optional("green"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
+    }
+)
+
+SERVICE_APPLY_PRESET_SCHEMA = vol.Schema(
+    {
+        vol.Required("preset"): vol.In(PRESET_MODES),
+    }
+)
+
+SERVICE_SET_SIMULATION_SCHEMA = vol.Schema(
+    {
+        vol.Required("enabled"): cv.boolean,
     }
 )
 
@@ -96,6 +112,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.info("Setting AquaReef channels: %s", levels)
         await coordinator.async_set_all_channels(levels)
 
+    async def handle_apply_preset(call: ServiceCall) -> None:
+        preset = call.data["preset"]
+        _LOGGER.info("Applying AquaReef preset: %s", preset)
+        await coordinator.async_set_mode(preset)
+
+    async def handle_set_simulation(call: ServiceCall) -> None:
+        enabled = call.data["enabled"]
+        _LOGGER.info("Setting AquaReef day simulation: %s", enabled)
+        await coordinator.async_set_simulation(enabled)
+
     async def handle_reboot(call: ServiceCall) -> None:
         _LOGGER.info("Rebooting AquaReef device")
         await coordinator.async_reboot()
@@ -105,6 +131,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     hass.services.async_register(
         DOMAIN, SERVICE_SET_CHANNELS, handle_set_channels, schema=SERVICE_SET_CHANNELS_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_APPLY_PRESET, handle_apply_preset, schema=SERVICE_APPLY_PRESET_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_SET_SIMULATION, handle_set_simulation, schema=SERVICE_SET_SIMULATION_SCHEMA
     )
     hass.services.async_register(
         DOMAIN, SERVICE_REBOOT, handle_reboot
