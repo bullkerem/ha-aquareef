@@ -1,4 +1,4 @@
-"""Sensor platform for AquaReef Aquarium Lighting diagnostics."""
+"""Sensor platform for AquaReef Aquarium Lighting diagnostics and status."""
 
 from __future__ import annotations
 
@@ -41,6 +41,8 @@ async def async_setup_entry(
         AquaReefApSensor(coordinator),
         AquaReefFirmwareSensor(coordinator),
         AquaReefTcpStatusSensor(coordinator),
+        AquaReefSimulationPhaseSensor(coordinator),
+        AquaReefActivePresetSensor(coordinator),
     ]
 
     async_add_entities(sensors)
@@ -57,6 +59,40 @@ class AquaReefBaseSensor(CoordinatorEntity[AquaReefCoordinator], SensorEntity):
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator.mac)},
         )
+
+
+class AquaReefSimulationPhaseSensor(AquaReefBaseSensor):
+    """Current phase of 24h Day Simulation."""
+
+    _attr_icon = "mdi:weather-sunset-up"
+
+    def __init__(self, coordinator: AquaReefCoordinator) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_name = "Gün Simülasyonu Fazı"
+        self._attr_unique_id = f"{coordinator.mac}_simulation_phase"
+
+    @property
+    def native_value(self) -> str:
+        """Return simulation phase."""
+        return self.coordinator.simulation_phase
+
+
+class AquaReefActivePresetSensor(AquaReefBaseSensor):
+    """Current active preset or lighting mode."""
+
+    _attr_icon = "mdi:palette-swatch-outline"
+
+    def __init__(self, coordinator: AquaReefCoordinator) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_name = "Aktif Efekt / Profil"
+        self._attr_unique_id = f"{coordinator.mac}_active_preset"
+
+    @property
+    def native_value(self) -> str:
+        """Return current mode."""
+        return self.coordinator.current_mode
 
 
 class AquaReefSignalPctSensor(AquaReefBaseSensor):
