@@ -1,4 +1,4 @@
-﻿"""Sensor platform for AquaReef Aquarium Lighting diagnostics."""
+"""Sensor platform for AquaReef Aquarium Lighting diagnostics."""
 
 from __future__ import annotations
 
