@@ -1,0 +1,24 @@
+﻿{
+  "config": {
+    "step": {
+      "user": {
+        "title": "AquaReef Akvaryum Aydınlatması",
+        "description": "AquaReef LED armatürünüzün IP adresini ve iletişim portunu girin.",
+        "data": {
+          "host": "IP Adresi",
+          "port": "TCP Portu (Varsayılan: 8899)",
+          "http_port": "HTTP Yönetim Portu (Varsayılan: 80)",
+          "username": "Kullanıcı Adı (Varsayılan: admin)",
+          "password": "Şifre (Varsayılan: admin)",
+          "name": "Cihaz Adı"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cihaza bağlanılamadı. Lütfen IP adresinin (192.168.8.90) ve portun doğru olduğundan emin olun."
+    },
+    "abort": {
+      "already_configured": "Bu cihaz zaten Home Assistant'a eklenmiş durumda."
+    }
+  }
+}
