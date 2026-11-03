@@ -1,4 +1,4 @@
-﻿"""The AquaReef Aquarium Lighting integration."""
+"""The AquaReef Aquarium Lighting integration."""
 
 from __future__ import annotations
 
