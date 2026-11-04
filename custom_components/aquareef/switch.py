@@ -32,6 +32,7 @@ async def async_setup_entry(
             AquaReefScheduleSwitch(coordinator),
             AquaReefStormSwitch(coordinator),
             AquaReefCloudSwitch(coordinator),
+            AquaReefSettingsPanelSwitch(coordinator),
         ]
     )
 
@@ -189,3 +190,37 @@ class AquaReefCloudSwitch(CoordinatorEntity[AquaReefCoordinator], SwitchEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Disable cloud effect."""
         await self.coordinator.async_set_cloud(False)
+
+
+class AquaReefSettingsPanelSwitch(CoordinatorEntity[AquaReefCoordinator], SwitchEntity):
+    """Switch to toggle the inline detailed settings panel on the Lovelace dashboard."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:tune-variant"
+
+    def __init__(self, coordinator: AquaReefCoordinator) -> None:
+        """Initialize the switch."""
+        super().__init__(coordinator)
+        self._attr_name = "Ayarlar Paneli"
+        self._attr_unique_id = f"{coordinator.mac}_settings_panel_switch"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.coordinator.mac)},
+        )
+
+    @property
+    def is_on(self) -> bool:
+        """Return True if the settings panel is expanded."""
+        return self.coordinator.settings_panel_open
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Expand the inline settings panel."""
+        await self.coordinator.async_set_settings_panel(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Collapse the inline settings panel."""
+        await self.coordinator.async_set_settings_panel(False)
+
