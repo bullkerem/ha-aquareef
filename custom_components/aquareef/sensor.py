@@ -63,7 +63,7 @@ class AquaReefBaseSensor(CoordinatorEntity[AquaReefCoordinator], SensorEntity):
 
 
 class AquaReefSimulationPhaseSensor(AquaReefBaseSensor):
-    """Current phase of 24h Day Simulation."""
+    """Current phase of 24h Day Simulation or Manual Schedule."""
 
     _attr_icon = "mdi:weather-sunset-up"
 
@@ -77,6 +77,23 @@ class AquaReefSimulationPhaseSensor(AquaReefBaseSensor):
     def native_value(self) -> str:
         """Return simulation phase."""
         return self.coordinator.simulation_phase
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return rich simulation and schedule attributes for Lovelace UI."""
+        return {
+            "simulation_enabled": self.coordinator.simulation_enabled,
+            "simulation_profile": self.coordinator.simulation_profile,
+            "sim_start_time": self.coordinator.sim_start_time,
+            "sim_end_time": self.coordinator.sim_end_time,
+            "sim_moon_end_time": self.coordinator.sim_moon_end_time,
+            "sim_ramp_minutes": self.coordinator.sim_ramp_minutes,
+            "sim_moon_level": self.coordinator.sim_moon_level,
+            "schedule_enabled": self.coordinator.schedule_enabled,
+            "schedule_slots": self.coordinator.schedule_slots,
+            "channels": self.coordinator.channels,
+            "custom_saved_channels": self.coordinator.custom_saved_channels,
+        }
 
 
 class AquaReefActivePresetSensor(AquaReefBaseSensor):
@@ -94,6 +111,15 @@ class AquaReefActivePresetSensor(AquaReefBaseSensor):
     def native_value(self) -> str:
         """Return current mode."""
         return self.coordinator.current_mode
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return active preset details."""
+        return {
+            "simulation_profile": self.coordinator.simulation_profile,
+            "simulation_enabled": self.coordinator.simulation_enabled,
+            "schedule_enabled": self.coordinator.schedule_enabled,
+        }
 
 
 class AquaReefSignalPctSensor(AquaReefBaseSensor):
@@ -183,7 +209,9 @@ class AquaReefSerialSensor(AquaReefBaseSensor):
     @property
     def native_value(self) -> str | None:
         """Return serial number."""
-        return self.coordinator.serial or self.coordinator.data.get("serial") if self.coordinator.data else None
+        return self.coordinator.serial or (
+            self.coordinator.data.get("serial") if self.coordinator.data else None
+        )
 
 
 class AquaReefWattageSensor(AquaReefBaseSensor):
@@ -200,7 +228,9 @@ class AquaReefWattageSensor(AquaReefBaseSensor):
     @property
     def native_value(self) -> str | None:
         """Return rated wattage."""
-        return self.coordinator.wattage or self.coordinator.data.get("wattage") if self.coordinator.data else None
+        return self.coordinator.wattage or (
+            self.coordinator.data.get("wattage") if self.coordinator.data else None
+        )
 
 
 class AquaReefSsidSensor(AquaReefBaseSensor):
@@ -234,7 +264,11 @@ class AquaReefApSensor(AquaReefBaseSensor):
     @property
     def native_value(self) -> str | None:
         """Return device AP name."""
-        return self.coordinator.data.get("ap_name") if self.coordinator.data else self.coordinator.ap_name
+        return (
+            self.coordinator.data.get("ap_name")
+            if self.coordinator.data
+            else self.coordinator.ap_name
+        )
 
 
 class AquaReefFirmwareSensor(AquaReefBaseSensor):
@@ -251,8 +285,16 @@ class AquaReefFirmwareSensor(AquaReefBaseSensor):
     @property
     def native_value(self) -> str | None:
         """Return chip and version."""
-        chip = self.coordinator.data.get("chip", self.coordinator.chip) if self.coordinator.data else self.coordinator.chip
-        ver = self.coordinator.data.get("version", self.coordinator.version) if self.coordinator.data else self.coordinator.version
+        chip = (
+            self.coordinator.data.get("chip", self.coordinator.chip)
+            if self.coordinator.data
+            else self.coordinator.chip
+        )
+        ver = (
+            self.coordinator.data.get("version", self.coordinator.version)
+            if self.coordinator.data
+            else self.coordinator.version
+        )
         return f"{chip} {ver}"
 
 

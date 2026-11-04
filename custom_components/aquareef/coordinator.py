@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import logging
 import random
 import re
+import time
 from typing import Any
 
 import aiohttp
@@ -14,7 +15,8 @@ from aiohttp import BasicAuth
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.event import async_track_time_interval
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.storage import Store
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 import homeassistant.util.dt as dt_util
 
 from .const import (
@@ -28,52 +30,51 @@ from .const import (
     PRESET_MODES,
     PRESETS,
     SCAN_INTERVAL_SECONDS,
+    SCHEDULE_LIGHT_OPTIONS,
+    SCHEDULE_LIGHT_PRESETS,
+    SIM_END_TIME_OPTIONS,
+    SIM_MOON_END_OPTIONS,
+    SIM_START_TIME_OPTIONS,
+    SIMULATION_PROFILE_NAMES,
+    SIMULATION_PROFILES,
+    SLOT_1_TIME_OPTIONS,
+    SLOT_2_TIME_OPTIONS,
+    SLOT_3_TIME_OPTIONS,
+    SLOT_4_TIME_OPTIONS,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-# 24-Hour Reef Sun Simulation Keypoints for 9 channels: (minute_of_day, channels_dict, phase_name)
-SIMULATION_SCHEDULE = [
-    (0, {"red": 0, "green": 0, "royal_blue": 0, "blue": 0, "white": 0, "uv": 0, "mint": 0, "cyan": 0, "violet": 0}, "🌙 Gece Dinlenmesi"),
-    (480, {"red": 0, "green": 0, "royal_blue": 0, "blue": 0, "white": 0, "uv": 0, "mint": 0, "cyan": 0, "violet": 0}, "🌙 Gece Dinlenmesi"),  # 08:00
-    (600, {"red": 15, "green": 5, "royal_blue": 35, "blue": 25, "white": 10, "uv": 15, "mint": 5, "cyan": 15, "violet": 20}, "🌅 Gün Doğumu (Şafak)"),  # 10:00
-    (750, {"red": 18, "green": 15, "royal_blue": 75, "blue": 70, "white": 40, "uv": 50, "mint": 20, "cyan": 45, "violet": 55}, "🌤️ Kuşluk Vakti"),  # 12:30
-    (870, {"red": 20, "green": 20, "royal_blue": 95, "blue": 90, "white": 65, "uv": 75, "mint": 30, "cyan": 70, "violet": 80}, "☀️ Gün Ortası (Zirve Güneş)"),  # 14:30
-    (1020, {"red": 20, "green": 20, "royal_blue": 95, "blue": 90, "white": 65, "uv": 75, "mint": 30, "cyan": 70, "violet": 80}, "☀️ Gün Ortası (Zirve Güneş)"),  # 17:00
-    (1140, {"red": 25, "green": 10, "royal_blue": 65, "blue": 50, "white": 25, "uv": 35, "mint": 15, "cyan": 35, "violet": 45}, "⛅ İkindi Vakti"),  # 19:00
-    (1230, {"red": 35, "green": 5, "royal_blue": 45, "blue": 30, "white": 5, "uv": 10, "mint": 5, "cyan": 15, "violet": 25}, "🌇 Gün Batımı"),  # 20:30
-    (1290, {"red": 0, "green": 0, "royal_blue": 8, "blue": 4, "white": 0, "uv": 0, "mint": 0, "cyan": 2, "violet": 4}, "🌙 Gece / Ay Işığı"),  # 21:30
-    (1410, {"red": 0, "green": 0, "royal_blue": 4, "blue": 2, "white": 0, "uv": 0, "mint": 0, "cyan": 1, "violet": 2}, "🌙 Gece / Ay Işığı"),  # 23:30
-    (1439, {"red": 0, "green": 0, "royal_blue": 0, "blue": 0, "white": 0, "uv": 0, "mint": 0, "cyan": 0, "violet": 0}, "🌙 Gece Dinlenmesi"),  # 23:59
-]
+STORAGE_VERSION = 1
+STORAGE_KEY = f"{DOMAIN}_settings"
 
 
-def interpolate_channels(minute_now: int) -> tuple[dict[str, int], str]:
-    """Calculate interpolated channel values for the current minute of the day."""
-    if minute_now <= SIMULATION_SCHEDULE[0][0]:
-        return SIMULATION_SCHEDULE[0][1].copy(), SIMULATION_SCHEDULE[0][2]
-    if minute_now >= SIMULATION_SCHEDULE[-1][0]:
-        return SIMULATION_SCHEDULE[-1][1].copy(), SIMULATION_SCHEDULE[-1][2]
+def parse_hhmm_to_minutes(hhmm: str, default_min: int = 480) -> int:
+    """Convert 'HH:MM' string to minute of day (0..1439)."""
+    try:
+        clean = hhmm.strip()
+        if ":" not in clean:
+            return default_min
+        parts = clean.split(":")
+        h = max(0, min(23, int(parts[0])))
+        m = max(0, min(59, int(parts[1])))
+        return h * 60 + m
+    except Exception:
+        return default_min
 
-    for i in range(len(SIMULATION_SCHEDULE) - 1):
-        m0, ch0, p0 = SIMULATION_SCHEDULE[i]
-        m1, ch1, p1 = SIMULATION_SCHEDULE[i + 1]
 
-        if m0 <= minute_now <= m1:
-            ratio = 0.0 if m1 == m0 else (minute_now - m0) / float(m1 - m0)
-            interp = {}
-            for k in CHANNEL_ORDER:
-                v0 = ch0.get(k, 0)
-                v1 = ch1.get(k, 0)
-                interp[k] = int(round(v0 + ratio * (v1 - v0)))
-            phase = p1 if ratio >= 0.5 else p0
-            return interp, phase
-
-    return SIMULATION_SCHEDULE[0][1].copy(), SIMULATION_SCHEDULE[0][2]
+def is_minute_in_window(minute_now: int, start_min: int, end_min: int) -> bool:
+    """Return True if minute_now is inside [start_min, end_min), supporting midnight wrap."""
+    if start_min == end_min:
+        return False
+    if start_min < end_min:
+        return start_min <= minute_now < end_min
+    # Crosses midnight (e.g. 22:00 to 01:00)
+    return minute_now >= start_min or minute_now < end_min
 
 
 class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """Coordinator to manage AquaReef device communication and synchronization."""
+    """Coordinator to manage AquaReef device communication, simulation, and schedules."""
 
     def __init__(
         self,
@@ -99,93 +100,385 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.password = password
         self.device_name = name
 
-        # Discovered hardware attributes
+        self._store = Store[dict[str, Any]](hass, STORAGE_VERSION, f"{STORAGE_KEY}_{host}")
+        self._storage_loaded = False
+
+        # Hardware identity (pre-populated to avoid any background TCP 8899 polling beeps)
         self.mac: str = "34:EA:E7:48:C6:21"
-        self.serial: str = ""
+        self.serial: str = "AR3763128062746034216"
         self.model: str = "AquaReef PRO 4"
         self.version: str = "4.1.3"
         self.wattage: str = "200W"
         self.chip: str = "HF-LPT170"
-        self.ssid: str = ""
-        self.rssi_pct: int = 0
-        self.ap_name: str = ""
+        self.ssid: str = "homeguneri"
+        self.rssi_pct: int = 80
+        self.ap_name: str = "AquaReefPRO4:424"
 
-        # Internal lighting state
+        # Master & Channel state
         self.is_on: bool = True
         self.master_brightness: int = 255  # 0-255
-        self.current_mode: str = "Manuel"
-        self.channels: dict[str, int] = {k: 50 for k in CHANNEL_ORDER}
+        self.current_mode: str = "Gün Simülasyonu"
+        self.channels: dict[str, int] = {
+            k: CHANNELS[k]["default"] for k in CHANNEL_ORDER
+        }
+        self._last_active_channels: dict[str, int] = self.channels.copy()
+        self.custom_saved_channels: dict[str, int] = self.channels.copy()
 
-        # Simulation & Dynamic Effects state
-        self.simulation_enabled: bool = False
-        self.simulation_phase: str = "Kapalı"
+        # Day Simulation Settings (Gün Simülasyonu & Hazır 4 Seçenek & Saatler)
+        self.simulation_enabled: bool = True
+        self.simulation_profile: str = SIMULATION_PROFILE_NAMES[0]
+        self.sim_start_time: str = "08:30"
+        self.sim_end_time: str = "21:30"
+        self.sim_moon_end_time: str = "23:30"
+        self.sim_ramp_minutes: int = 60
+        self.sim_moon_level: int = 8
+        self.simulation_phase: str = "☀️ Gün Simülasyonu"
+
+        # Manual Time-Slot Schedule ("Hangi Saat Hangi Işık Yansın")
+        self.schedule_enabled: bool = False
+        self.schedule_slots: dict[int, dict[str, Any]] = {
+            1: {
+                "name": "1. Dilim (Sabah)",
+                "time_range": "08:30 - 12:00",
+                "light_preset": "🌅 Gün Doğumu (Mavi + Hafif Beyaz & Kırmızı)",
+                "intensity": 65,
+            },
+            2: {
+                "name": "2. Dilim (Öğle)",
+                "time_range": "12:00 - 17:00",
+                "light_preset": "☀️ Tam Spektrum Gün Ortası (Tüm Işıklar Dengeli)",
+                "intensity": 95,
+            },
+            3: {
+                "name": "3. Dilim (Akşam)",
+                "time_range": "17:00 - 21:00",
+                "light_preset": "🟣 Floresan Mor & Mavi (UV + Menekşe + Royal)",
+                "intensity": 70,
+            },
+            4: {
+                "name": "4. Dilim (Gece)",
+                "time_range": "21:00 - 23:30",
+                "light_preset": "🌙 Gece Ay Işığı (Loş Royal Blue & Menekşe)",
+                "intensity": 30,
+            },
+        }
+
+        # Dynamic Effects state
         self.storm_enabled: bool = False
         self.cloud_enabled: bool = False
 
-        # Concurrency & protocol state
+        # Concurrency & TCP protocol state
         self._socket_lock = asyncio.Lock()
         self._manual_mode_sent: bool = False
         self._last_sent_payload: bytes = b""
+        self._last_tcp_close_ts: float = 0.0
         self._last_http_poll_ts: float = 0.0
+        self._last_sim_hw_sync_ts: float = 0.0
+        self._last_sim_synced_phase: str = ""
 
-        # Background simulation timer (every 60 seconds)
+        # Periodic 60s timer for Day Simulation and Manual Time Schedule
         self._unsub_sim_timer = async_track_time_interval(
-            hass, self._async_simulation_tick, timedelta(seconds=60)
+            hass, self._async_periodic_tick, timedelta(seconds=60)
         )
 
-    async def _async_simulation_tick(self, _now: datetime) -> None:
-        """Periodic background tick for smooth 24-hour day simulation and effects."""
-        if not self.simulation_enabled:
+    async def async_shutdown(self) -> None:
+        """Clean up timers when unloading integration."""
+        if self._unsub_sim_timer is not None:
+            self._unsub_sim_timer()
+            self._unsub_sim_timer = None
+
+    async def async_load_stored_settings(self) -> None:
+        """Load persisted simulation, schedule, and channel settings from disk."""
+        if self._storage_loaded:
+            return
+        self._storage_loaded = True
+        try:
+            stored = await self._store.async_load()
+            if not stored or not isinstance(stored, dict):
+                return
+
+            self.is_on = bool(stored.get("is_on", self.is_on))
+            self.master_brightness = int(stored.get("master_brightness", self.master_brightness))
+            self.current_mode = str(stored.get("current_mode", self.current_mode))
+
+            if isinstance(stored.get("channels"), dict):
+                for k in CHANNEL_ORDER:
+                    if k in stored["channels"]:
+                        self.channels[k] = max(0, min(100, int(stored["channels"][k])))
+
+            if isinstance(stored.get("last_active_channels"), dict):
+                for k in CHANNEL_ORDER:
+                    if k in stored["last_active_channels"]:
+                        self._last_active_channels[k] = max(
+                            0, min(100, int(stored["last_active_channels"][k]))
+                        )
+
+            if isinstance(stored.get("custom_saved_channels"), dict):
+                for k in CHANNEL_ORDER:
+                    if k in stored["custom_saved_channels"]:
+                        self.custom_saved_channels[k] = max(
+                            0, min(100, int(stored["custom_saved_channels"][k]))
+                        )
+
+            self.simulation_enabled = bool(stored.get("simulation_enabled", self.simulation_enabled))
+            prof = stored.get("simulation_profile")
+            if prof in SIMULATION_PROFILES:
+                self.simulation_profile = prof
+
+            if stored.get("sim_start_time") in SIM_START_TIME_OPTIONS:
+                self.sim_start_time = stored["sim_start_time"]
+            if stored.get("sim_end_time") in SIM_END_TIME_OPTIONS:
+                self.sim_end_time = stored["sim_end_time"]
+            if stored.get("sim_moon_end_time") in SIM_MOON_END_OPTIONS:
+                self.sim_moon_end_time = stored["sim_moon_end_time"]
+
+            self.sim_ramp_minutes = max(
+                15, min(180, int(stored.get("sim_ramp_minutes", self.sim_ramp_minutes)))
+            )
+            self.sim_moon_level = max(
+                0, min(30, int(stored.get("sim_moon_level", self.sim_moon_level)))
+            )
+
+            self.schedule_enabled = bool(stored.get("schedule_enabled", self.schedule_enabled))
+            raw_slots = stored.get("schedule_slots")
+            if isinstance(raw_slots, dict):
+                for s_idx in (1, 2, 3, 4):
+                    s_data = raw_slots.get(str(s_idx)) or raw_slots.get(s_idx)
+                    if isinstance(s_data, dict):
+                        if "time_range" in s_data:
+                            self.schedule_slots[s_idx]["time_range"] = str(s_data["time_range"])
+                        if s_data.get("light_preset") in SCHEDULE_LIGHT_PRESETS:
+                            self.schedule_slots[s_idx]["light_preset"] = s_data["light_preset"]
+                        if "intensity" in s_data:
+                            self.schedule_slots[s_idx]["intensity"] = max(
+                                0, min(100, int(s_data["intensity"]))
+                            )
+        except Exception as err:
+            _LOGGER.warning("Could not load stored AquaReef settings: %s", err)
+
+    async def _async_save_settings(self) -> None:
+        """Persist current settings to Home Assistant storage."""
+        try:
+            payload = {
+                "is_on": self.is_on,
+                "master_brightness": self.master_brightness,
+                "current_mode": self.current_mode,
+                "channels": self.channels,
+                "last_active_channels": self._last_active_channels,
+                "custom_saved_channels": self.custom_saved_channels,
+                "simulation_enabled": self.simulation_enabled,
+                "simulation_profile": self.simulation_profile,
+                "sim_start_time": self.sim_start_time,
+                "sim_end_time": self.sim_end_time,
+                "sim_moon_end_time": self.sim_moon_end_time,
+                "sim_ramp_minutes": self.sim_ramp_minutes,
+                "sim_moon_level": self.sim_moon_level,
+                "schedule_enabled": self.schedule_enabled,
+                "schedule_slots": {str(k): v for k, v in self.schedule_slots.items()},
+            }
+            await self._store.async_save(payload)
+        except Exception as err:
+            _LOGGER.debug("Failed to save AquaReef settings: %s", err)
+
+    def compute_simulation_channels(self, minute_now: int) -> tuple[dict[str, int], str]:
+        """Compute interpolated 9-channel values for Day Simulation based on user settings."""
+        peak = SIMULATION_PROFILES.get(
+            self.simulation_profile, SIMULATION_PROFILES[SIMULATION_PROFILE_NAMES[0]]
+        )
+        start_min = parse_hhmm_to_minutes(self.sim_start_time, 510)  # default 08:30
+        end_min = parse_hhmm_to_minutes(self.sim_end_time, 1290)  # default 21:30
+        if end_min <= start_min + 60:
+            end_min = min(1439, start_min + 120)
+
+        ramp = max(15, min(180, self.sim_ramp_minutes))
+        total_day = end_min - start_min
+        if ramp * 4 > total_day:
+            ramp = max(10, total_day // 4)
+
+        # Build key spectra from the selected profile's peak
+        zero_ch = {k: 0 for k in CHANNEL_ORDER}
+        dawn_ch = {
+            "red": int(round(peak["red"] * 0.35)),
+            "green": int(round(peak["green"] * 0.20)),
+            "royal_blue": int(round(peak["royal_blue"] * 0.45)),
+            "blue": int(round(peak["blue"] * 0.35)),
+            "white": int(round(peak["white"] * 0.15)),
+            "uv": int(round(peak["uv"] * 0.30)),
+            "mint": int(round(peak["mint"] * 0.15)),
+            "cyan": int(round(peak["cyan"] * 0.25)),
+            "violet": int(round(peak["violet"] * 0.35)),
+        }
+        morning_ch = {k: int(round(peak[k] * 0.78)) for k in CHANNEL_ORDER}
+        peak_ch = peak.copy()
+        afternoon_ch = {
+            "red": int(round(peak["red"] * 0.80)),
+            "green": int(round(peak["green"] * 0.55)),
+            "royal_blue": int(round(peak["royal_blue"] * 0.80)),
+            "blue": int(round(peak["blue"] * 0.70)),
+            "white": int(round(peak["white"] * 0.45)),
+            "uv": int(round(peak["uv"] * 0.65)),
+            "mint": int(round(peak["mint"] * 0.45)),
+            "cyan": int(round(peak["cyan"] * 0.60)),
+            "violet": int(round(peak["violet"] * 0.75)),
+        }
+        sunset_ch = {
+            "red": max(10, int(round(peak["red"] * 0.70))),
+            "green": int(round(peak["green"] * 0.25)),
+            "royal_blue": int(round(peak["royal_blue"] * 0.45)),
+            "blue": int(round(peak["blue"] * 0.35)),
+            "white": int(round(peak["white"] * 0.08)),
+            "uv": int(round(peak["uv"] * 0.25)),
+            "mint": int(round(peak["mint"] * 0.10)),
+            "cyan": int(round(peak["cyan"] * 0.20)),
+            "violet": int(round(peak["violet"] * 0.40)),
+        }
+
+        moon_lvl = max(0, min(30, self.sim_moon_level))
+        if self.sim_moon_end_time == "Kapalı (Hemen Sönsün)" or moon_lvl == 0:
+            moon_ch = zero_ch.copy()
+            has_moon = False
+        else:
+            has_moon = True
+            moon_ch = {
+                "red": 0,
+                "green": 0,
+                "royal_blue": max(1, int(round(moon_lvl * (peak["royal_blue"] / 100.0)))),
+                "blue": max(1, int(round(moon_lvl * 0.6 * (peak["blue"] / 100.0)))),
+                "white": 0,
+                "uv": int(round(moon_lvl * 0.3 * (peak["uv"] / 100.0))),
+                "mint": 0,
+                "cyan": int(round(moon_lvl * 0.3 * (peak["cyan"] / 100.0))),
+                "violet": max(1, int(round(moon_lvl * 0.7 * (peak["violet"] / 100.0)))),
+            }
+
+        t0 = start_min
+        t1 = start_min + ramp
+        t2 = start_min + 2 * ramp
+        t3 = end_min - 2 * ramp
+        t4 = end_min - ramp
+        t5 = end_min
+
+        def lerp_dict(c0: dict[str, int], c1: dict[str, int], ratio: float) -> dict[str, int]:
+            r = max(0.0, min(1.0, ratio))
+            return {
+                k: max(0, min(100, int(round(c0.get(k, 0) + r * (c1.get(k, 0) - c0.get(k, 0))))))
+                for k in CHANNEL_ORDER
+            }
+
+        # Check daytime phases [t0 .. t5]
+        if t0 <= minute_now < t1:
+            return lerp_dict(zero_ch, dawn_ch, (minute_now - t0) / float(max(1, t1 - t0))), "🌅 Gün Doğumu (Şafak)"
+        if t1 <= minute_now < t2:
+            return lerp_dict(dawn_ch, morning_ch, (minute_now - t1) / float(max(1, t2 - t1))), "🌤️ Kuşluk Vakti"
+        if t2 <= minute_now < t3:
+            # Smooth rise to peak in first 20% of midday
+            mid_span = max(1, t3 - t2)
+            if minute_now - t2 < mid_span * 0.25:
+                return lerp_dict(morning_ch, peak_ch, (minute_now - t2) / float(mid_span * 0.25)), "☀️ Gün Ortası (Zirve)"
+            return peak_ch.copy(), "☀️ Gün Ortası (Zirve)"
+        if t3 <= minute_now < t4:
+            return lerp_dict(peak_ch, afternoon_ch, (minute_now - t3) / float(max(1, t4 - t3))), "⛅ İkindi Vakti"
+        if t4 <= minute_now < t5:
+            return lerp_dict(afternoon_ch, sunset_ch, (minute_now - t4) / float(max(1, t5 - t4))), "🌇 Gün Batımı"
+
+        # Night / Moonlight check outside [t0 .. t5)
+        if has_moon:
+            if self.sim_moon_end_time == "Sabaha Kadar Açık":
+                return moon_ch, "🌙 Gece / Ay Işığı"
+            moon_end_min = parse_hhmm_to_minutes(self.sim_moon_end_time, 1410)
+            if is_minute_in_window(minute_now, t5, moon_end_min):
+                return moon_ch, "🌙 Gece / Ay Işığı"
+
+        return zero_ch, "🌙 Gece Dinlenmesi (Kapalı)"
+
+    def compute_schedule_channels(self, minute_now: int) -> tuple[dict[str, int], str, int | None]:
+        """Compute 9-channel values for Manual Time-Slot Schedule ('Hangi Saat Hangi Işık Yansın')."""
+        for slot_id in (1, 2, 3, 4):
+            slot = self.schedule_slots.get(slot_id, {})
+            t_range = str(slot.get("time_range", "Kapalı")).strip()
+            if t_range == "Kapalı" or "-" not in t_range:
+                continue
+            parts = t_range.split("-")
+            if len(parts) != 2:
+                continue
+            s_min = parse_hhmm_to_minutes(parts[0].strip(), -1)
+            e_min = parse_hhmm_to_minutes(parts[1].strip(), -1)
+            if s_min < 0 or e_min < 0:
+                continue
+
+            if is_minute_in_window(minute_now, s_min, e_min):
+                preset_name = slot.get("light_preset", SCHEDULE_LIGHT_OPTIONS[0])
+                intensity = max(0, min(100, int(slot.get("intensity", 80))))
+                raw_spec = SCHEDULE_LIGHT_PRESETS.get(preset_name)
+                if raw_spec == "custom":
+                    base_ch = self.custom_saved_channels.copy()
+                elif isinstance(raw_spec, dict):
+                    base_ch = raw_spec.copy()
+                else:
+                    base_ch = {k: CHANNELS[k]["default"] for k in CHANNEL_ORDER}
+
+                scale = intensity / 100.0
+                scaled = {
+                    k: max(0, min(100, int(round(base_ch.get(k, 0) * scale))))
+                    for k in CHANNEL_ORDER
+                }
+                short_light = preset_name.split("(")[0].strip()
+                phase_str = f"🕒 {slot_id}. Dilim ({t_range}) • {short_light} %{intensity}"
+                return scaled, phase_str, slot_id
+
+        return {k: 0 for k in CHANNEL_ORDER}, "🌙 Program Dışı (Kapalı)", None
+
+    async def _async_periodic_tick(self, _now: datetime) -> None:
+        """Periodic 60-second tick for Day Simulation and Manual Time-Slot Schedule."""
+        if not self.simulation_enabled and not self.schedule_enabled:
             return
 
         local_now = dt_util.now()
         minute_of_day = local_now.hour * 60 + local_now.minute
-        target_channels, phase = interpolate_channels(minute_of_day)
 
-        self.simulation_phase = phase
-        self.current_mode = "Gün Simülasyonu"
+        if self.schedule_enabled:
+            target_channels, phase, _ = self.compute_schedule_channels(minute_of_day)
+            self.current_mode = "Manuel Saat Programı"
+        else:
+            target_channels, phase = self.compute_simulation_channels(minute_of_day)
+            self.current_mode = "Gün Simülasyonu"
 
-        # Apply cloud effect if enabled (temporarily dim white & blues)
-        if self.cloud_enabled:
-            dim_factor = random.uniform(0.5, 0.75)
+        # Apply cloud effect if enabled
+        if self.cloud_enabled and any(v > 0 for v in target_channels.values()):
+            dim_factor = random.uniform(0.55, 0.80)
             target_channels["white"] = int(target_channels.get("white", 0) * dim_factor)
             target_channels["blue"] = int(target_channels.get("blue", 0) * dim_factor)
             target_channels["royal_blue"] = int(target_channels.get("royal_blue", 0) * dim_factor)
 
-        self.channels = target_channels
-        self.is_on = any(v > 0 for v in self.channels.values())
+        old_is_on = self.is_on
+        new_is_on = any(v > 0 for v in target_channels.values())
+        max_channel_diff = max(
+            abs(target_channels.get(k, 0) - self.channels.get(k, 0)) for k in CHANNEL_ORDER
+        )
 
-        await self._async_sync_hardware()
+        self.channels = target_channels
+        self.simulation_phase = phase
+        self.is_on = new_is_on
+        if new_is_on and sum(target_channels.values()) >= 25:
+            self._last_active_channels = target_channels.copy()
+
+        now_ts = time.time()
+        phase_changed = phase != self._last_sim_synced_phase
+        power_changed = new_is_on != old_is_on
+        periodic_due = (now_ts - self._last_sim_hw_sync_ts >= 600) and (max_channel_diff >= 3)
+
+        if phase_changed or power_changed or periodic_due:
+            self._last_sim_synced_phase = phase
+            self._last_sim_hw_sync_ts = now_ts
+            await self._async_sync_hardware(force_send=power_changed)
+
         self.async_set_updated_data(self._get_current_state())
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Fetch status and hardware identity from device."""
-        data: dict[str, Any] = {
-            "online": False,
-            "tcp_connected": False,
-            "rssi_pct": self.rssi_pct,
-            "rssi_dbm": None,
-            "ssid": self.ssid,
-            "ip": self.host,
-            "mac": self.mac,
-            "serial": self.serial,
-            "model": self.model,
-            "version": self.version,
-            "wattage": self.wattage,
-            "chip": self.chip,
-            "ap_name": self.ap_name,
-            "is_on": self.is_on,
-            "master_brightness": self.master_brightness,
-            "current_mode": self.current_mode,
-            "channels": self.channels.copy(),
-            "simulation_enabled": self.simulation_enabled,
-            "simulation_phase": self.simulation_phase,
-            "storm_enabled": self.storm_enabled,
-            "cloud_enabled": self.cloud_enabled,
-        }
+        """Fetch status from HTTP management page (never sends TCP packets on poll to prevent beeps)."""
+        if not self._storage_loaded:
+            await self.async_load_stored_settings()
 
-        # 1. Query HTTP management status page for Wi-Fi info (throttled to every 300s to eliminate Wi-Fi blinking)
-        import time
         now_ts = time.time()
         should_query_http = (now_ts - self._last_http_poll_ts > 300) or not self.ssid
         if should_query_http:
@@ -210,49 +503,21 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             if raw_rssi.isdigit():
                                 self.rssi_pct = int(raw_rssi)
             except Exception as err:
-                _LOGGER.debug("HTTP status polling failed: %s", err)
+                _LOGGER.debug("HTTP status polling skipped/failed: %s", err)
 
-        data["online"] = True
-        data["rssi_pct"] = self.rssi_pct
-        data["rssi_dbm"] = round((self.rssi_pct / 2) - 100) if self.rssi_pct else None
-        data["ssid"] = self.ssid
-        data["mac"] = self.mac
-        data["chip"] = self.chip
-        data["ap_name"] = self.ap_name
-
-        # 2. Query hardware device info over TCP port 8899 ONCE at startup only (never on routine poll to prevent beeping)
-        if not self.serial:
-            try:
-                resp = await self.async_send_tcp_raw(b"C" * 20, wait_response=True)
-                if resp:
-                    resp_str = resp.decode("ascii", errors="ignore").strip()
-                    parts = resp_str.split(",")
-                    if len(parts) >= 6 and parts[0] == "C":
-                        self.serial = parts[2]
-                        self.version = parts[3]
-                        self.model = f"AquaReef {parts[4]}"
-                        self.wattage = f"{parts[5]}W"
-            except Exception as err:
-                _LOGGER.debug("Initial TCP device query failed: %s", err)
-
-        data["serial"] = self.serial or "AR3763128062746034216"
-        data["version"] = self.version or "4.1.3"
-        data["model"] = self.model or "AquaReef PRO 4"
-        data["wattage"] = self.wattage or "200W"
-        data["tcp_connected"] = data["online"]
-
-        if not data["online"]:
-            raise UpdateFailed(f"Cannot reach AquaReef at {self.host}")
-
-        return data
+        return self._get_current_state()
 
     async def async_send_tcp_raw(self, payload: bytes, wait_response: bool = False) -> bytes:
         """Send raw bytes over TCP to port 8899 in a thread-safe manner."""
         async with self._socket_lock:
+            elapsed = time.time() - self._last_tcp_close_ts
+            if elapsed < 0.30:
+                await asyncio.sleep(0.30 - elapsed)
+
             try:
                 reader, writer = await asyncio.wait_for(
                     asyncio.open_connection(self.host, self.port),
-                    timeout=2.0,
+                    timeout=3.0,
                 )
                 writer.write(payload)
                 await writer.drain()
@@ -263,19 +528,25 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         resp = await asyncio.wait_for(reader.read(1024), timeout=1.0)
                     except asyncio.TimeoutError:
                         pass
+                else:
+                    await asyncio.sleep(0.06)
 
                 writer.close()
                 try:
-                    await writer.wait_closed()
+                    await asyncio.wait_for(writer.wait_closed(), timeout=1.0)
                 except Exception:
                     pass
+                self._last_tcp_close_ts = time.time()
                 return resp
             except Exception as err:
+                self._last_tcp_close_ts = time.time()
                 _LOGGER.error("Failed to send TCP command to AquaReef (%s): %s", self.host, err)
                 raise
 
-    async def _async_sync_hardware(self) -> None:
-        """Serialize channels and send official 20-byte AquaReef frame over TCP port 8899."""
+    async def _async_sync_hardware(
+        self, force_send: bool = False, ensure_manual_mode: bool = False
+    ) -> None:
+        """Serialize 9 channels and send official 20-byte AquaReef 'm' frame over TCP port 8899."""
         if not self.is_on:
             effective_channels = {k: 0 for k in CHANNEL_ORDER}
         else:
@@ -285,10 +556,10 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 for k in CHANNEL_ORDER
             }
 
-        # Build official 20-byte AquaReef PRO 4 frame:
-        # byte 0:  0x6D ('m')
+        # Official 20-byte AquaReef PRO 4 frame:
+        # byte 0: 0x6D ('m')
         # byte 1..18: 9 channels * 2 bytes (big endian 16-bit: high byte, low byte)
-        # byte 19: 0x00 ('\0')
+        # byte 19: 0x00
         payload = bytearray(20)
         payload[0] = 0x6D  # 'm'
 
@@ -301,41 +572,225 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         payload[19] = 0x00
         payload_bytes = bytes(payload)
 
-        # Do not send redundant frames if nothing changed (prevents beeping from buzzer!)
-        if payload_bytes == self._last_sent_payload and self._manual_mode_sent:
+        if not force_send and payload_bytes == self._last_sent_payload and self._manual_mode_sent:
             return
 
-        try:
-            # Switch hardware to manual mode if not yet active
-            if not self._manual_mode_sent:
-                try:
-                    await self.async_send_tcp_raw(b"o" * 20)
-                    self._manual_mode_sent = True
-                    await asyncio.sleep(0.05)
-                except Exception as err:
-                    _LOGGER.debug("Manual mode switch error: %s", err)
+        need_mode_header = (not self._manual_mode_sent) or ensure_manual_mode
 
-            await self.async_send_tcp_raw(payload_bytes)
-            self._last_sent_payload = payload_bytes
-            _LOGGER.debug("Sent official AquaReef frame: %s", payload_bytes.hex())
-        except Exception as err:
-            _LOGGER.error("Failed to sync AquaReef hardware over TCP (%s): %s", self.host, err)
+        async with self._socket_lock:
+            for attempt in range(2):
+                elapsed = time.time() - self._last_tcp_close_ts
+                if elapsed < 0.30:
+                    await asyncio.sleep(0.30 - elapsed)
+
+                try:
+                    reader, writer = await asyncio.wait_for(
+                        asyncio.open_connection(self.host, self.port),
+                        timeout=3.0,
+                    )
+                    if need_mode_header or attempt > 0:
+                        writer.write(b"o" * 20)
+                        await writer.drain()
+                        await asyncio.sleep(0.25)
+                        self._manual_mode_sent = True
+
+                    writer.write(payload_bytes)
+                    await writer.drain()
+                    await asyncio.sleep(0.06)
+
+                    writer.close()
+                    try:
+                        await asyncio.wait_for(writer.wait_closed(), timeout=1.0)
+                    except Exception:
+                        pass
+
+                    self._last_tcp_close_ts = time.time()
+                    self._last_sent_payload = payload_bytes
+                    _LOGGER.debug("Synced AquaReef hardware frame: %s", payload_bytes.hex())
+                    return
+                except Exception as err:
+                    self._last_tcp_close_ts = time.time()
+                    if attempt == 0:
+                        _LOGGER.debug("Retrying AquaReef TCP sync after error: %s", err)
+                        await asyncio.sleep(0.35)
+                    else:
+                        _LOGGER.error(
+                            "Failed to sync AquaReef hardware over TCP (%s): %s", self.host, err
+                        )
 
     async def async_set_simulation(self, enabled: bool) -> None:
         """Enable or disable 24-hour day simulation."""
         self.simulation_enabled = enabled
         if enabled:
+            self.schedule_enabled = False
+            self.storm_enabled = False
             self.current_mode = "Gün Simülasyonu"
-            self._manual_mode_sent = False
             local_now = dt_util.now()
             minute_of_day = local_now.hour * 60 + local_now.minute
-            self.channels, self.simulation_phase = interpolate_channels(minute_of_day)
+            calc_ch, phase = self.compute_simulation_channels(minute_of_day)
+            self.channels = calc_ch
+            self.simulation_phase = phase
             self.is_on = any(v > 0 for v in self.channels.values())
+            self._last_sim_synced_phase = phase
+            self._last_sim_hw_sync_ts = time.time()
         else:
             self.simulation_phase = "Kapalı (Manuel)"
             self.current_mode = "Manuel"
+            if not any(v > 0 for v in self.channels.values()):
+                self.channels = self._last_active_channels.copy()
+            self.is_on = any(v > 0 for v in self.channels.values())
 
-        await self._async_sync_hardware()
+        await self._async_sync_hardware(force_send=True)
+        await self._async_save_settings()
+        self.async_set_updated_data(self._get_current_state())
+
+    async def async_set_simulation_profile(self, profile: str) -> None:
+        """Select one of the 4 Ready-Made Day Simulation profiles and apply immediately."""
+        if profile not in SIMULATION_PROFILES:
+            return
+        self.simulation_profile = profile
+        self.simulation_enabled = True
+        self.schedule_enabled = False
+        self.storm_enabled = False
+        self.current_mode = "Gün Simülasyonu"
+
+        local_now = dt_util.now()
+        minute_of_day = local_now.hour * 60 + local_now.minute
+        calc_ch, phase = self.compute_simulation_channels(minute_of_day)
+
+        # If selected during night/low-light hours, apply a visible 50% preview of the profile
+        # so the user immediately sees the chosen preset on the physical aquarium light!
+        if sum(calc_ch.values()) < 45:
+            peak = SIMULATION_PROFILES[profile]
+            calc_ch = {k: max(0, min(100, int(round(peak[k] * 0.50)))) for k in CHANNEL_ORDER}
+            short_p = profile.split("(")[0].strip()
+            phase = f"✨ {short_p} (Aktif)"
+
+        self.channels = calc_ch
+        self.simulation_phase = phase
+        self.is_on = True
+        if self.master_brightness == 0:
+            self.master_brightness = 255
+        self._last_active_channels = calc_ch.copy()
+        self._last_sim_synced_phase = phase
+        self._last_sim_hw_sync_ts = time.time()
+
+        await self._async_sync_hardware(force_send=True)
+        await self._async_save_settings()
+        self.async_set_updated_data(self._get_current_state())
+
+    async def async_set_simulation_config(
+        self,
+        profile: str | None = None,
+        start_time: str | None = None,
+        end_time: str | None = None,
+        moon_end_time: str | None = None,
+        ramp_minutes: int | None = None,
+        moon_level: int | None = None,
+    ) -> None:
+        """Update Day Simulation schedule times and parameters."""
+        if profile and profile in SIMULATION_PROFILES:
+            self.simulation_profile = profile
+        if start_time and start_time in SIM_START_TIME_OPTIONS:
+            self.sim_start_time = start_time
+        if end_time and end_time in SIM_END_TIME_OPTIONS:
+            self.sim_end_time = end_time
+        if moon_end_time and moon_end_time in SIM_MOON_END_OPTIONS:
+            self.sim_moon_end_time = moon_end_time
+        if ramp_minutes is not None:
+            self.sim_ramp_minutes = max(15, min(180, int(ramp_minutes)))
+        if moon_level is not None:
+            self.sim_moon_level = max(0, min(30, int(moon_level)))
+
+        if self.simulation_enabled:
+            local_now = dt_util.now()
+            minute_of_day = local_now.hour * 60 + local_now.minute
+            self.channels, self.simulation_phase = self.compute_simulation_channels(minute_of_day)
+            self.is_on = any(v > 0 for v in self.channels.values())
+            await self._async_sync_hardware(force_send=True)
+
+        await self._async_save_settings()
+        self.async_set_updated_data(self._get_current_state())
+
+    async def async_set_schedule_enabled(self, enabled: bool) -> None:
+        """Enable or disable Manual Time-Slot Schedule ('Hangi Saat Hangi Işık Yansın')."""
+        self.schedule_enabled = enabled
+        if enabled:
+            self.simulation_enabled = False
+            self.storm_enabled = False
+            self.current_mode = "Manuel Saat Programı"
+            local_now = dt_util.now()
+            minute_of_day = local_now.hour * 60 + local_now.minute
+            calc_ch, phase, _ = self.compute_schedule_channels(minute_of_day)
+            self.channels = calc_ch
+            self.simulation_phase = phase
+            self.is_on = any(v > 0 for v in self.channels.values())
+            if self.is_on and self.master_brightness == 0:
+                self.master_brightness = 255
+        else:
+            self.current_mode = "Manuel"
+            self.simulation_phase = "Kapalı (Manuel)"
+            if not any(v > 0 for v in self.channels.values()):
+                self.channels = self._last_active_channels.copy()
+            self.is_on = any(v > 0 for v in self.channels.values())
+
+        await self._async_sync_hardware(force_send=True)
+        await self._async_save_settings()
+        self.async_set_updated_data(self._get_current_state())
+
+    async def async_set_schedule_slot(
+        self,
+        slot: int,
+        time_range: str | None = None,
+        light_preset: str | None = None,
+        intensity: int | None = None,
+        apply_preview: bool = True,
+    ) -> None:
+        """Configure a Manual Time-Slot (1..4) and optionally preview/apply."""
+        if slot not in (1, 2, 3, 4):
+            return
+        if time_range is not None:
+            self.schedule_slots[slot]["time_range"] = str(time_range)
+        if light_preset is not None and light_preset in SCHEDULE_LIGHT_PRESETS:
+            self.schedule_slots[slot]["light_preset"] = light_preset
+        if intensity is not None:
+            self.schedule_slots[slot]["intensity"] = max(0, min(100, int(intensity)))
+
+        # If schedule mode is active, or if user changed light_preset/intensity, sync hardware
+        local_now = dt_util.now()
+        minute_of_day = local_now.hour * 60 + local_now.minute
+        calc_ch, phase, active_slot = self.compute_schedule_channels(minute_of_day)
+
+        if self.schedule_enabled:
+            if active_slot == slot or active_slot is not None:
+                self.channels = calc_ch
+                self.simulation_phase = phase
+                self.is_on = any(v > 0 for v in self.channels.values())
+                await self._async_sync_hardware(force_send=True)
+            elif apply_preview and (light_preset is not None or intensity is not None):
+                # Preview the edited slot immediately so user sees the light they picked
+                p_name = self.schedule_slots[slot]["light_preset"]
+                p_int = self.schedule_slots[slot]["intensity"]
+                raw_spec = SCHEDULE_LIGHT_PRESETS.get(p_name)
+                base_ch = (
+                    self.custom_saved_channels.copy()
+                    if raw_spec == "custom"
+                    else (raw_spec.copy() if isinstance(raw_spec, dict) else self.channels.copy())
+                )
+                self.channels = {
+                    k: max(0, min(100, int(round(base_ch.get(k, 0) * (p_int / 100.0)))))
+                    for k in CHANNEL_ORDER
+                }
+                self.is_on = any(v > 0 for v in self.channels.values())
+                await self._async_sync_hardware(force_send=True)
+
+        await self._async_save_settings()
+        self.async_set_updated_data(self._get_current_state())
+
+    async def async_save_current_as_custom_spectrum(self) -> None:
+        """Save current 9-channel manual sliders as the user's custom spectrum preset."""
+        self.custom_saved_channels = self.channels.copy()
+        await self._async_save_settings()
         self.async_set_updated_data(self._get_current_state())
 
     async def async_set_storm(self, enabled: bool) -> None:
@@ -344,11 +799,14 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if enabled:
             self.current_mode = "Fırtına & Şimşek"
             self.simulation_enabled = False
-            self.simulation_phase = "Fırtına Efekti"
+            self.schedule_enabled = False
+            self.simulation_phase = "⚡ Fırtına Efekti"
+            self.is_on = True
             asyncio.create_task(self._async_trigger_storm_flashes())
         else:
             self.current_mode = "Manuel"
             self.simulation_phase = "Kapalı (Manuel)"
+            await self._async_sync_hardware(force_send=True)
         self.async_set_updated_data(self._get_current_state())
 
     async def _async_trigger_storm_flashes(self) -> None:
@@ -357,61 +815,79 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             dim_bg = {
                 "red": 0, "green": 0, "royal_blue": 15, "blue": 10,
-                "white": 2, "uv": 5, "mint": 0, "cyan": 5, "violet": 5
+                "white": 2, "uv": 5, "mint": 0, "cyan": 5, "violet": 5,
             }
             self.channels = dim_bg
-            await self._async_sync_hardware()
+            await self._async_sync_hardware(force_send=True)
 
             for _ in range(3):
                 if not self.storm_enabled:
                     break
-                await asyncio.sleep(random.uniform(2.0, 5.0))
-                # Quick flashes
-                for _ in range(random.randint(2, 4)):
+                await asyncio.sleep(random.uniform(2.0, 4.0))
+                for _ in range(random.randint(2, 3)):
                     if not self.storm_enabled:
                         break
-                    # Lightning peak
                     self.channels = {
                         "red": 10, "green": 10, "royal_blue": 90, "blue": 90,
-                        "white": 100, "uv": 100, "mint": 20, "cyan": 80, "violet": 100
+                        "white": 100, "uv": 100, "mint": 20, "cyan": 80, "violet": 100,
                     }
-                    await self._async_sync_hardware()
-                    await asyncio.sleep(random.uniform(0.05, 0.12))
-                    # Fall back
+                    await self._async_sync_hardware(force_send=True)
+                    await asyncio.sleep(random.uniform(0.35, 0.50))
                     self.channels = dim_bg
-                    await self._async_sync_hardware()
-                    await asyncio.sleep(random.uniform(0.1, 0.25))
+                    await self._async_sync_hardware(force_send=True)
+                    await asyncio.sleep(random.uniform(0.35, 0.55))
         finally:
-            if not self.storm_enabled:
-                self.channels = saved_channels
-                await self._async_sync_hardware()
-                self.async_set_updated_data(self._get_current_state())
+            self.storm_enabled = False
+            self.channels = saved_channels
+            self.current_mode = "Manuel"
+            self.simulation_phase = "Manuel"
+            await self._async_sync_hardware(force_send=True)
+            self.async_set_updated_data(self._get_current_state())
 
     async def async_set_cloud(self, enabled: bool) -> None:
         """Enable or disable cloud passing effect."""
         self.cloud_enabled = enabled
         if enabled:
             self.current_mode = "Bulut Efekti"
+            dim_factor = 0.65
+            base = self._last_active_channels.copy()
+            base["white"] = int(base.get("white", 40) * dim_factor)
+            base["blue"] = int(base.get("blue", 70) * dim_factor)
+            self.channels = base
+            self.is_on = True
+        else:
+            self.channels = self._last_active_channels.copy()
+        await self._async_sync_hardware(force_send=True)
+        await self._async_save_settings()
         self.async_set_updated_data(self._get_current_state())
 
     async def async_set_channel(self, channel: str, level_pct: int) -> None:
         """Set individual channel brightness percentage (0-100)."""
         self.simulation_enabled = False
-        self.simulation_phase = "Manuel"
+        self.schedule_enabled = False
+        self.simulation_phase = "🎛️ Manuel Spektrum"
         self.current_mode = "Manuel"
         level_pct = max(0, min(100, int(level_pct)))
         self.channels[channel] = level_pct
 
         if any(v > 0 for v in self.channels.values()):
             self.is_on = True
+            if self.master_brightness == 0:
+                self.master_brightness = 255
+            if sum(self.channels.values()) >= 20:
+                self._last_active_channels = self.channels.copy()
+        else:
+            self.is_on = False
 
-        await self._async_sync_hardware()
+        await self._async_sync_hardware(force_send=True)
+        await self._async_save_settings()
         self.async_set_updated_data(self._get_current_state())
 
     async def async_set_all_channels(self, levels: dict[str, int]) -> None:
-        """Set all channel percentages at once."""
+        """Set multiple or all channel percentages at once."""
         self.simulation_enabled = False
-        self.simulation_phase = "Manuel"
+        self.schedule_enabled = False
+        self.simulation_phase = "🎛️ Manuel Spektrum"
         self.current_mode = "Manuel"
         for ch, val in levels.items():
             if ch in self.channels:
@@ -419,26 +895,54 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         if any(v > 0 for v in self.channels.values()):
             self.is_on = True
+            if self.master_brightness == 0:
+                self.master_brightness = 255
+            if sum(self.channels.values()) >= 20:
+                self._last_active_channels = self.channels.copy()
+        else:
+            self.is_on = False
 
-        await self._async_sync_hardware()
+        await self._async_sync_hardware(force_send=True)
+        await self._async_save_settings()
         self.async_set_updated_data(self._get_current_state())
 
     async def async_set_power(self, power: bool) -> None:
-        """Turn overall light on or off."""
+        """Turn overall light on or off reliably."""
         self.is_on = power
         if not power:
+            if sum(self.channels.values()) >= 20:
+                self._last_active_channels = self.channels.copy()
             self.simulation_enabled = False
+            self.schedule_enabled = False
             self.storm_enabled = False
             self.cloud_enabled = False
+            self.simulation_phase = "⚫ Kapalı"
+        else:
+            if self.master_brightness == 0:
+                self.master_brightness = 255
+            # Ensure channels are visibly lit when turning on
+            if sum(self.channels.values()) < 20:
+                if sum(self._last_active_channels.values()) >= 20:
+                    self.channels = self._last_active_channels.copy()
+                else:
+                    self.channels = {k: CHANNELS[k]["default"] for k in CHANNEL_ORDER}
+                    self._last_active_channels = self.channels.copy()
+            if self.simulation_phase == "⚫ Kapalı" or self.simulation_phase.endswith("(Kapalı)"):
+                self.simulation_phase = "💡 Açık (Manuel)"
+                self.current_mode = "Manuel"
 
-        await self._async_sync_hardware()
+        await self._async_sync_hardware(force_send=True, ensure_manual_mode=True)
+        await self._async_save_settings()
         self.async_set_updated_data(self._get_current_state())
 
     async def async_set_master_brightness(self, brightness: int) -> None:
         """Set overall master brightness (0-255)."""
-        self.master_brightness = max(0, min(255, brightness))
+        self.master_brightness = max(0, min(255, int(brightness)))
         self.is_on = self.master_brightness > 0
-        await self._async_sync_hardware()
+        if self.is_on and sum(self.channels.values()) < 20:
+            self.channels = self._last_active_channels.copy()
+        await self._async_sync_hardware(force_send=True)
+        await self._async_save_settings()
         self.async_set_updated_data(self._get_current_state())
 
     async def async_set_mode(self, mode: str) -> None:
@@ -453,6 +957,10 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self.async_set_simulation(True)
             return
 
+        if preset_val == "schedule":
+            await self.async_set_schedule_enabled(True)
+            return
+
         if preset_val == "storm":
             await self.async_set_storm(True)
             return
@@ -461,19 +969,29 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self.async_set_cloud(True)
             return
 
-        # Static preset dict
         self.simulation_enabled = False
+        self.schedule_enabled = False
         self.storm_enabled = False
-        self.simulation_phase = f"Sabit Mod ({mode})"
+        self.simulation_phase = f"🎨 {mode}"
 
         if isinstance(preset_val, dict):
             for k in CHANNEL_ORDER:
                 self.channels[k] = preset_val.get(k, 0)
             self.is_on = any(v > 0 for v in self.channels.values())
+            if self.is_on:
+                if self.master_brightness == 0:
+                    self.master_brightness = 255
+                if sum(self.channels.values()) >= 20:
+                    self._last_active_channels = self.channels.copy()
         elif mode == "Manuel":
             self.is_on = True
+            if self.master_brightness == 0:
+                self.master_brightness = 255
+            if sum(self.channels.values()) < 20:
+                self.channels = self._last_active_channels.copy()
 
-        await self._async_sync_hardware()
+        await self._async_sync_hardware(force_send=True)
+        await self._async_save_settings()
         self.async_set_updated_data(self._get_current_state())
 
     async def async_reboot(self) -> None:
@@ -485,7 +1003,7 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             timeout = aiohttp.ClientTimeout(total=5)
             async with aiohttp.ClientSession(auth=auth, timeout=timeout) as session:
                 async with session.post(url, data=data) as resp:
-                    _LOGGER.info("AquaReef reboot requested, response code: %s", resp.status)
+                    _LOGGER.info("AquaReef reboot requested, status: %s", resp.status)
         except Exception as err:
             _LOGGER.error("Failed to request AquaReef reboot: %s", err)
             raise
@@ -510,8 +1028,17 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "master_brightness": self.master_brightness,
             "current_mode": self.current_mode,
             "channels": self.channels.copy(),
+            "custom_saved_channels": self.custom_saved_channels.copy(),
             "simulation_enabled": self.simulation_enabled,
+            "simulation_profile": self.simulation_profile,
+            "sim_start_time": self.sim_start_time,
+            "sim_end_time": self.sim_end_time,
+            "sim_moon_end_time": self.sim_moon_end_time,
+            "sim_ramp_minutes": self.sim_ramp_minutes,
+            "sim_moon_level": self.sim_moon_level,
             "simulation_phase": self.simulation_phase,
+            "schedule_enabled": self.schedule_enabled,
+            "schedule_slots": {k: v.copy() for k, v in self.schedule_slots.items()},
             "storm_enabled": self.storm_enabled,
             "cloud_enabled": self.cloud_enabled,
         }

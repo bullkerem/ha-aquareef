@@ -34,7 +34,6 @@ async def async_setup_entry(
         AquaReefMasterLight(coordinator),
     ]
 
-    # Add individual spectral channels
     for ch_id, ch_info in CHANNELS.items():
         entities.append(AquaReefChannelLight(coordinator, ch_id, ch_info))
 
@@ -82,6 +81,12 @@ class AquaReefMasterLight(CoordinatorEntity[AquaReefCoordinator], LightEntity):
         """Return extra state attributes."""
         return {
             "mode": self.coordinator.current_mode,
+            "simulation_enabled": self.coordinator.simulation_enabled,
+            "simulation_profile": self.coordinator.simulation_profile,
+            "sim_start_time": self.coordinator.sim_start_time,
+            "sim_end_time": self.coordinator.sim_end_time,
+            "sim_moon_end_time": self.coordinator.sim_moon_end_time,
+            "schedule_enabled": self.coordinator.schedule_enabled,
             "channels": self.coordinator.channels,
             "ip_address": self.coordinator.host,
             "mac_address": self.coordinator.mac,
@@ -149,7 +154,9 @@ class AquaReefChannelLight(CoordinatorEntity[AquaReefCoordinator], LightEntity):
         if ATTR_BRIGHTNESS in kwargs:
             pct = int(round(kwargs[ATTR_BRIGHTNESS] / 2.55))
         else:
-            pct = self.coordinator.channels.get(self._channel, 100) or 100
+            pct = self.coordinator.channels.get(self._channel, 75)
+            if pct <= 0:
+                pct = CHANNELS.get(self._channel, {}).get("default", 75) or 75
         await self.coordinator.async_set_channel(self._channel, pct)
 
     async def async_turn_off(self, **kwargs: Any) -> None:

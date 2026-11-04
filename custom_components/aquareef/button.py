@@ -11,7 +11,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, SIMULATION_PROFILE_NAMES
 from .coordinator import AquaReefCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -30,6 +30,13 @@ QUICK_PRESETS = [
     ("bulut_efekti", "Bulut Efekti Başlat", "mdi:weather-partly-cloudy", "Bulut Efekti"),
 ]
 
+SIM_PROFILE_BUTTONS = [
+    ("sim_secenek_1", "Simülasyon Seçenek 1: Karışık Resif", "mdi:fishbowl", SIMULATION_PROFILE_NAMES[0]),
+    ("sim_secenek_2", "Simülasyon Seçenek 2: SPS Mercan", "mdi:flare", SIMULATION_PROFILE_NAMES[1]),
+    ("sim_secenek_3", "Simülasyon Seçenek 3: LPS & Floresan", "mdi:jellyfish", SIMULATION_PROFILE_NAMES[2]),
+    ("sim_secenek_4", "Simülasyon Seçenek 4: Doğal Gün Işığı", "mdi:white-balance-sunny", SIMULATION_PROFILE_NAMES[3]),
+]
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -42,10 +49,14 @@ async def async_setup_entry(
     buttons: list[ButtonEntity] = [
         AquaReefRestartButton(coordinator),
         AquaReefRefreshButton(coordinator),
+        AquaReefSaveCustomSpectrumButton(coordinator),
     ]
 
     for key, name, icon, mode in QUICK_PRESETS:
         buttons.append(AquaReefPresetButton(coordinator, key, name, icon, mode))
+
+    for key, name, icon, profile in SIM_PROFILE_BUTTONS:
+        buttons.append(AquaReefSimProfileButton(coordinator, key, name, icon, profile))
 
     async_add_entities(buttons)
 
@@ -81,6 +92,40 @@ class AquaReefPresetButton(AquaReefBaseButton):
         await self.coordinator.async_set_mode(self._mode)
 
 
+class AquaReefSimProfileButton(AquaReefBaseButton):
+    """Button to select one of the 4 Ready-Made Day Simulation options."""
+
+    def __init__(
+        self, coordinator: AquaReefCoordinator, key: str, name: str, icon: str, profile: str
+    ) -> None:
+        """Initialize the simulation profile button."""
+        super().__init__(coordinator)
+        self._attr_name = name
+        self._attr_icon = icon
+        self._profile = profile
+        self._attr_unique_id = f"{coordinator.mac}_btn_{key}"
+
+    async def async_press(self) -> None:
+        """Activate this day simulation profile."""
+        await self.coordinator.async_set_simulation_profile(self._profile)
+
+
+class AquaReefSaveCustomSpectrumButton(AquaReefBaseButton):
+    """Button to save current 9-channel sliders as custom schedule spectrum."""
+
+    _attr_icon = "mdi:content-save-cog"
+
+    def __init__(self, coordinator: AquaReefCoordinator) -> None:
+        """Initialize the save custom spectrum button."""
+        super().__init__(coordinator)
+        self._attr_name = "Özel Spektrum Olarak Kaydet"
+        self._attr_unique_id = f"{coordinator.mac}_save_custom_spectrum_button"
+
+    async def async_press(self) -> None:
+        """Save current channels."""
+        await self.coordinator.async_save_current_as_custom_spectrum()
+
+
 class AquaReefRestartButton(AquaReefBaseButton):
     """Button to restart AquaReef Wi-Fi controller."""
 
@@ -98,7 +143,7 @@ class AquaReefRestartButton(AquaReefBaseButton):
 
 
 class AquaReefRefreshButton(AquaReefBaseButton):
-    """Button to manually poll AquaReef status."""
+    """Button to manually sync and refresh AquaReef status."""
 
     _attr_icon = "mdi:sync"
 
@@ -109,5 +154,6 @@ class AquaReefRefreshButton(AquaReefBaseButton):
         self._attr_unique_id = f"{coordinator.mac}_refresh_button"
 
     async def async_press(self) -> None:
-        """Press the button."""
+        """Force hardware sync and refresh."""
+        await self.coordinator._async_sync_hardware(force_send=True, ensure_manual_mode=True)
         await self.coordinator.async_request_refresh()

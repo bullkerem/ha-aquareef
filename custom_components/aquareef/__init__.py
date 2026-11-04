@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 import voluptuous as vol
 
@@ -30,7 +29,9 @@ from .const import (
     SERVICE_REBOOT,
     SERVICE_SEND_RAW,
     SERVICE_SET_CHANNELS,
+    SERVICE_SET_SCHEDULE_SLOT,
     SERVICE_SET_SIMULATION,
+    SERVICE_SET_SIMULATION_CONFIG,
 )
 from .coordinator import AquaReefCoordinator
 
@@ -40,11 +41,11 @@ PLATFORMS: list[Platform] = [
     Platform.LIGHT,
     Platform.SENSOR,
     Platform.SELECT,
+    Platform.NUMBER,
     Platform.BUTTON,
     Platform.SWITCH,
 ]
 
-# Service Schemas
 SERVICE_SEND_RAW_SCHEMA = vol.Schema(
     {
         vol.Required("command"): cv.string,
@@ -78,6 +79,26 @@ SERVICE_SET_SIMULATION_SCHEMA = vol.Schema(
     }
 )
 
+SERVICE_SET_SIMULATION_CONFIG_SCHEMA = vol.Schema(
+    {
+        vol.Optional("profile"): cv.string,
+        vol.Optional("start_time"): cv.string,
+        vol.Optional("end_time"): cv.string,
+        vol.Optional("moon_end_time"): cv.string,
+        vol.Optional("ramp_minutes"): vol.All(vol.Coerce(int), vol.Range(min=15, max=180)),
+        vol.Optional("moon_level"): vol.All(vol.Coerce(int), vol.Range(min=0, max=30)),
+    }
+)
+
+SERVICE_SET_SCHEDULE_SLOT_SCHEMA = vol.Schema(
+    {
+        vol.Required("slot"): vol.All(vol.Coerce(int), vol.Range(min=1, max=4)),
+        vol.Optional("time_range"): cv.string,
+        vol.Optional("light_preset"): cv.string,
+        vol.Optional("intensity"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
+    }
+)
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up AquaReef from a config entry."""
@@ -93,12 +114,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         name=entry.data.get(CONF_NAME, DEFAULT_NAME),
     )
 
+    await coordinator.async_load_stored_settings()
     await coordinator.async_config_entry_first_refresh()
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Register integration services
     async def handle_send_raw(call: ServiceCall) -> None:
         cmd_str = call.data["command"]
         is_hex = call.data.get("is_hex", True)
@@ -107,26 +128,42 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             payload = bytes.fromhex(clean)
         else:
             payload = cmd_str.encode("utf-8")
-        _LOGGER.info("Sending raw AquaReef payload: %s", payload)
         await coordinator.async_send_tcp_raw(payload)
 
     async def handle_set_channels(call: ServiceCall) -> None:
         levels = {k: v for k, v in call.data.items() if v is not None}
-        _LOGGER.info("Setting AquaReef channels: %s", levels)
         await coordinator.async_set_all_channels(levels)
 
     async def handle_apply_preset(call: ServiceCall) -> None:
         preset = call.data["preset"]
-        _LOGGER.info("Applying AquaReef preset: %s", preset)
         await coordinator.async_set_mode(preset)
 
     async def handle_set_simulation(call: ServiceCall) -> None:
         enabled = call.data["enabled"]
-        _LOGGER.info("Setting AquaReef day simulation: %s", enabled)
         await coordinator.async_set_simulation(enabled)
 
+    async def handle_set_simulation_config(call: ServiceCall) -> None:
+        if "profile" in call.data and len(call.data) == 1:
+            await coordinator.async_set_simulation_profile(call.data["profile"])
+        else:
+            await coordinator.async_set_simulation_config(
+                profile=call.data.get("profile"),
+                start_time=call.data.get("start_time"),
+                end_time=call.data.get("end_time"),
+                moon_end_time=call.data.get("moon_end_time"),
+                ramp_minutes=call.data.get("ramp_minutes"),
+                moon_level=call.data.get("moon_level"),
+            )
+
+    async def handle_set_schedule_slot(call: ServiceCall) -> None:
+        await coordinator.async_set_schedule_slot(
+            slot=call.data["slot"],
+            time_range=call.data.get("time_range"),
+            light_preset=call.data.get("light_preset"),
+            intensity=call.data.get("intensity"),
+        )
+
     async def handle_reboot(call: ServiceCall) -> None:
-        _LOGGER.info("Rebooting AquaReef device")
         await coordinator.async_reboot()
 
     hass.services.async_register(
@@ -142,15 +179,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         DOMAIN, SERVICE_SET_SIMULATION, handle_set_simulation, schema=SERVICE_SET_SIMULATION_SCHEMA
     )
     hass.services.async_register(
-        DOMAIN, SERVICE_REBOOT, handle_reboot
+        DOMAIN,
+        SERVICE_SET_SIMULATION_CONFIG,
+        handle_set_simulation_config,
+        schema=SERVICE_SET_SIMULATION_CONFIG_SCHEMA,
     )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_SCHEDULE_SLOT,
+        handle_set_schedule_slot,
+        schema=SERVICE_SET_SCHEDULE_SLOT_SCHEMA,
+    )
+    hass.services.async_register(DOMAIN, SERVICE_REBOOT, handle_reboot)
 
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    coordinator: AquaReefCoordinator | None = hass.data[DOMAIN].get(entry.entry_id)
+    if coordinator is not None:
+        await coordinator.async_shutdown()
+
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
+        hass.data[DOMAIN].pop(entry.entry_id, None)
     return unload_ok

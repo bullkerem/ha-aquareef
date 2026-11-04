@@ -22,7 +22,6 @@ set_channels:
   fields:
     red:
       name: Kırmızı (Red)
-      description: Kırmızı LED kanalı (%0 - %100)
       selector:
         number:
           min: 0
@@ -30,7 +29,6 @@ set_channels:
           unit_of_measurement: "%"
     green:
       name: Yeşil / Amber
-      description: Yeşil / Amber LED kanalı (%0 - %100)
       selector:
         number:
           min: 0
@@ -38,7 +36,6 @@ set_channels:
           unit_of_measurement: "%"
     royal_blue:
       name: Royal Blue
-      description: Royal Blue (Koyu Mavi) LED kanalı (%0 - %100)
       selector:
         number:
           min: 0
@@ -46,7 +43,6 @@ set_channels:
           unit_of_measurement: "%"
     blue:
       name: Mavi (Blue)
-      description: Açık Mavi LED kanalı (%0 - %100)
       selector:
         number:
           min: 0
@@ -54,7 +50,6 @@ set_channels:
           unit_of_measurement: "%"
     white:
       name: Beyaz (White)
-      description: Soğuk Beyaz LED kanalı (%0 - %100)
       selector:
         number:
           min: 0
@@ -62,7 +57,6 @@ set_channels:
           unit_of_measurement: "%"
     uv:
       name: UV / Mor
-      description: UV LED kanalı (%0 - %100)
       selector:
         number:
           min: 0
@@ -70,7 +64,6 @@ set_channels:
           unit_of_measurement: "%"
     mint:
       name: Nane (Mint)
-      description: Mint Yeşili LED kanalı (%0 - %100)
       selector:
         number:
           min: 0
@@ -78,7 +71,6 @@ set_channels:
           unit_of_measurement: "%"
     cyan:
       name: Turkuaz (Cyan)
-      description: Camgöbeği / Turkuaz LED kanalı (%0 - %100)
       selector:
         number:
           min: 0
@@ -86,7 +78,6 @@ set_channels:
           unit_of_measurement: "%"
     violet:
       name: Menekşe (Violet)
-      description: Menekşe / Koyu Mor LED kanalı (%0 - %100)
       selector:
         number:
           min: 0
@@ -99,13 +90,13 @@ apply_preset:
   fields:
     preset:
       name: Aydınlatma Modu
-      description: Seçilecek profil veya efekt
       required: true
       selector:
         select:
           options:
             - "Manuel"
             - "Gün Simülasyonu"
+            - "Manuel Saat Programı"
             - "Gün Doğumu (Sunrise)"
             - "Gün Ortası (Midday)"
             - "Gün Batımı (Sunset)"
@@ -124,10 +115,74 @@ set_simulation:
   fields:
     enabled:
       name: Aktif mi?
-      description: Gün simülasyonu açık veya kapalı
       required: true
       selector:
         boolean:
+
+set_simulation_config:
+  name: Gün Simülasyonu Ayarlarını Güncelle
+  description: Gün simülasyonu hazır seçeneğini (1-4), açılış/kapanış saatlerini ve geçiş süresini ayarlar.
+  fields:
+    profile:
+      name: Hazır Simülasyon Seçeneği
+      selector:
+        select:
+          options:
+            - "1. Karışık Resif (Mixed Reef)"
+            - "2. SPS Mercan (Yüksek PAR & UV)"
+            - "3. LPS & Soft (Derin Mavi Floresan)"
+            - "4. Doğal Gün Işığı (Balık & Bitki)"
+    start_time:
+      name: Başlangıç (Açılış) Saati
+      selector:
+        text:
+    end_time:
+      name: Kapanış (Gün Batımı) Saati
+      selector:
+        text:
+    moon_end_time:
+      name: Gece Ay Işığı Bitiş Saati
+      selector:
+        text:
+    ramp_minutes:
+      name: Geçiş (Rampa) Süresi (Dk)
+      selector:
+        number:
+          min: 15
+          max: 180
+          step: 15
+    moon_level:
+      name: Gece Ay Işığı Seviyesi (%)
+      selector:
+        number:
+          min: 0
+          max: 30
+
+set_schedule_slot:
+  name: Manuel Saatlik Işık Programı Dilimi Ayarla
+  description: Hangi saat aralığında hangi ışığın ve yüzde kaç güçle yanacağını ayarlar.
+  fields:
+    slot:
+      name: Zaman Dilimi (1-4)
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 4
+    time_range:
+      name: Saat Aralığı (Örn. 08:00 - 12:00 veya Kapalı)
+      selector:
+        text:
+    light_preset:
+      name: Yanan Işık / Spektrum
+      selector:
+        text:
+    intensity:
+      name: Parlaklık Yüzdesi (%)
+      selector:
+        number:
+          min: 0
+          max: 100
 
 reboot:
   name: AquaReef Cihazını Yeniden Başlat

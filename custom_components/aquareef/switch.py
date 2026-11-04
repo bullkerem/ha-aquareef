@@ -1,4 +1,4 @@
-"""Switch platform for AquaReef day simulation and dynamic effects."""
+"""Switch platform for AquaReef day simulation, manual schedule, and dynamic effects."""
 
 from __future__ import annotations
 
@@ -29,6 +29,7 @@ async def async_setup_entry(
     async_add_entities(
         [
             AquaReefSimulationSwitch(coordinator),
+            AquaReefScheduleSwitch(coordinator),
             AquaReefStormSwitch(coordinator),
             AquaReefCloudSwitch(coordinator),
         ]
@@ -59,6 +60,19 @@ class AquaReefSimulationSwitch(CoordinatorEntity[AquaReefCoordinator], SwitchEnt
         """Return True if day simulation is active."""
         return self.coordinator.simulation_enabled
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return simulation configuration details."""
+        return {
+            "profile": self.coordinator.simulation_profile,
+            "start_time": self.coordinator.sim_start_time,
+            "end_time": self.coordinator.sim_end_time,
+            "moon_end_time": self.coordinator.sim_moon_end_time,
+            "ramp_minutes": self.coordinator.sim_ramp_minutes,
+            "moon_level": self.coordinator.sim_moon_level,
+            "phase": self.coordinator.simulation_phase,
+        }
+
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Enable simulation."""
         await self.coordinator.async_set_simulation(True)
@@ -66,6 +80,49 @@ class AquaReefSimulationSwitch(CoordinatorEntity[AquaReefCoordinator], SwitchEnt
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Disable simulation."""
         await self.coordinator.async_set_simulation(False)
+
+
+class AquaReefScheduleSwitch(CoordinatorEntity[AquaReefCoordinator], SwitchEntity):
+    """Switch to toggle Manual Time-Slot Schedule ('Hangi Saat Hangi Işık Yansın')."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:calendar-clock"
+
+    def __init__(self, coordinator: AquaReefCoordinator) -> None:
+        """Initialize the manual schedule switch."""
+        super().__init__(coordinator)
+        self._attr_name = "Manuel Saat Programı"
+        self._attr_unique_id = f"{coordinator.mac}_manual_schedule_switch"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.coordinator.mac)},
+        )
+
+    @property
+    def is_on(self) -> bool:
+        """Return True if manual schedule is active."""
+        return self.coordinator.schedule_enabled
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return schedule slots configuration."""
+        return {
+            "slot_1": self.coordinator.schedule_slots.get(1),
+            "slot_2": self.coordinator.schedule_slots.get(2),
+            "slot_3": self.coordinator.schedule_slots.get(3),
+            "slot_4": self.coordinator.schedule_slots.get(4),
+        }
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable manual time-slot schedule."""
+        await self.coordinator.async_set_schedule_enabled(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Disable manual time-slot schedule."""
+        await self.coordinator.async_set_schedule_enabled(False)
 
 
 class AquaReefStormSwitch(CoordinatorEntity[AquaReefCoordinator], SwitchEntity):
