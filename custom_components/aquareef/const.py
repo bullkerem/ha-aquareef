@@ -222,7 +222,7 @@ SCHEDULE_LIGHT_PRESETS: dict[str, dict[str, int] | str] = {
         "red": 45, "green": 15, "royal_blue": 55, "blue": 40, "white": 10, "uv": 20, "mint": 10, "cyan": 20, "violet": 35
     },
     "🌙 Gece Ay Işığı (Loş Royal Blue & Menekşe)": {
-        "red": 0, "green": 0, "royal_blue": 25, "blue": 15, "white": 0, "uv": 5, "mint": 0, "cyan": 5, "violet": 15
+        "red": 0, "green": 0, "royal_blue": 55, "blue": 45, "white": 0, "uv": 20, "mint": 0, "cyan": 15, "violet": 35
     },
     "🌱 Bitkili / Gün Işığı (Beyaz + Kırmızı + Yeşil)": {
         "red": 75, "green": 60, "royal_blue": 30, "blue": 40, "white": 85, "uv": 10, "mint": 40, "cyan": 20, "violet": 15
@@ -250,7 +250,7 @@ PRESETS = {
         "red": 45, "green": 15, "royal_blue": 55, "blue": 40, "white": 10, "uv": 25, "mint": 10, "cyan": 25, "violet": 40
     },
     "Ay Işığı / Gece (Moonlight)": {
-        "red": 0, "green": 0, "royal_blue": 25, "blue": 20, "white": 0, "uv": 10, "mint": 0, "cyan": 8, "violet": 20
+        "red": 0, "green": 0, "royal_blue": 55, "blue": 45, "white": 0, "uv": 20, "mint": 0, "cyan": 15, "violet": 35
     },
     "Derin Deniz (Deep Blue)": {
         "red": 0, "green": 5, "royal_blue": 100, "blue": 100, "white": 15, "uv": 85, "mint": 10, "cyan": 50, "violet": 90
