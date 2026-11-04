@@ -166,6 +166,7 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Dynamic Effects state
         self.storm_enabled: bool = False
         self.cloud_enabled: bool = False
+        self.settings_panel_open: bool = False
 
         # Concurrency & TCP protocol state
         self._socket_lock = asyncio.Lock()
@@ -842,12 +843,18 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     await self._async_sync_hardware(force_send=True)
                     await asyncio.sleep(random.uniform(0.35, 0.55))
         finally:
-            self.storm_enabled = False
-            self.channels = saved_channels
-            self.current_mode = "Manuel"
-            self.simulation_phase = "Manuel"
-            await self._async_sync_hardware(force_send=True)
-            self.async_set_updated_data(self._get_current_state())
+            if self.storm_enabled:
+                self.storm_enabled = False
+                self.channels = saved_channels
+                self.current_mode = "Manuel"
+                self.simulation_phase = "Manuel"
+                await self._async_sync_hardware(force_send=True)
+                self.async_set_updated_data(self._get_current_state())
+
+    async def async_set_settings_panel(self, enabled: bool) -> None:
+        """Toggle the inline dashboard settings panel visibility."""
+        self.settings_panel_open = bool(enabled)
+        self.async_set_updated_data(self._get_current_state())
 
     async def async_set_cloud(self, enabled: bool) -> None:
         """Enable or disable cloud passing effect."""
@@ -988,24 +995,22 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.channels[k] = preset_val.get(k, 0)
             self.is_on = any(v > 0 for v in self.channels.values())
             if self.is_on:
-                if self.master_brightness == 0:
-                    self.master_brightness = 255
+                self.master_brightness = 255
                 if sum(self.channels.values()) >= 20:
                     self._last_active_channels = self.channels.copy()
         elif mode == "Manuel":
             self.simulation_phase = "🎛️ Manuel Spektrum"
             self.is_on = True
-            if self.master_brightness == 0:
-                self.master_brightness = 255
-            if sum(self.channels.values()) < 25:
-                if sum(self.custom_saved_channels.values()) >= 25:
+            self.master_brightness = 255
+            if sum(self.channels.values()) < 50:
+                if sum(self.custom_saved_channels.values()) >= 50:
                     self.channels = self.custom_saved_channels.copy()
-                elif sum(self._last_active_channels.values()) >= 25:
+                elif sum(self._last_active_channels.values()) >= 50:
                     self.channels = self._last_active_channels.copy()
                 else:
                     self.channels = {k: CHANNELS[k]["default"] for k in CHANNEL_ORDER}
 
-        await self._async_sync_hardware(force_send=True)
+        await self._async_sync_hardware(force_send=True, ensure_manual_mode=True)
         await self._async_save_settings()
         self.async_set_updated_data(self._get_current_state())
 
