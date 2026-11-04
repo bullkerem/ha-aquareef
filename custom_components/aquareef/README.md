@@ -1,4 +1,4 @@
-# 🐠 AquaReef PRO 4 Akvaryum Aydınlatması — Home Assistant Entegrasyonu (v2.0)
+# 🐠 AquaReef PRO 4 Akvaryum Aydınlatması — Home Assistant Entegrasyonu (v2.1)
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/v/release/bullkerem/ha-aquareef?color=blue)](https://github.com/bullkerem/ha-aquareef/releases)
@@ -10,11 +10,11 @@ Bulut bağlantısına ihtiyaç duymadan doğrudan yerel Wi-Fi ağınız üzerind
 
 ---
 
-## 🌟 v2.0 Yenilikleri ve Özellikler
+## 🌟 v2.1 Yenilikleri ve Özellikler
 
-### 1. 🔇 Sessiz Tek-Soket TCP Protokolü & %100 Kararlı Açma/Kapama
+### 1. 🔇 Orijinal PRO 4 12-Bit PWM (`×40`) TCP Protokolü & %100 Kararlı Manuel / Ay Işığı Kontrolü
 - **Sürekli Bip Sesi Sorunu Giderildi:** Armatür üzerindeki piezo buzzer'ın her 60 saniyede bir ötmesine ve manuel moddan çıkmasına yol açan periyodik `0x43` (`'C'`) TCP yoklaması kaldırıldı.
-- **Tek Soketli El Sıkışma + PWM Çerçevesi:** `HF-LPT170` Wi-Fi modülünün çift soketli bağlantılarda yaşadığı zaman aşımı (`TimeoutError`) sorunu, `20-byte 'o'` (`0x6F` manuel kontrol kilidi) ve `20-byte 'm'` (`0x6D` + 9×16-bit PWM verisi) paketlerinin **tek bir TCP bağlantısı üzerinden 250 ms arayla** gönderilmesiyle kalıcı olarak çözüldü. Ara parlaklık ve simülasyon geçişleri tamamen sessiz çalışır.
+- **Orijinal `Pro4DataAdapter` 12-Bit PWM Kodlaması (`0..4000`):** AquaReef PRO 4 donanımındaki 9 kanalın her biri `%0–%100` seviyesinden `val * 40` (`0..4000` PWM adımı) olarak hesaplanıp `((val * 40) // 256, (val * 40) % 256)` şeklinde `20-byte 'm'` (`0x6D`) paketiyle doğrudan gönderilir. Böylece **🌙 Ay Işığı**, **🎛️ Manuel Işık** ve tüm tekil kanal sürgüleri anında gerçek parlaklığında yanar.
 
 ### 2. 🌅 Ayarlanabilir Gün Simülasyonu (Saat Ayarları + 4 Hazır Seçenek)
 - **Saat Kaçta Çalışsın / Kaçta Kapansın Ayarı:**

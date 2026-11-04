@@ -241,16 +241,16 @@ PRESETS = {
     "Gün Simülasyonu": "simulation",
     "Manuel Saat Programı": "schedule",
     "Gün Doğumu (Sunrise)": {
-        "red": 15, "green": 5, "royal_blue": 35, "blue": 25, "white": 10, "uv": 15, "mint": 5, "cyan": 15, "violet": 20
+        "red": 20, "green": 10, "royal_blue": 50, "blue": 40, "white": 15, "uv": 25, "mint": 10, "cyan": 25, "violet": 35
     },
     "Gün Ortası (Midday)": {
         "red": 20, "green": 20, "royal_blue": 95, "blue": 90, "white": 65, "uv": 75, "mint": 30, "cyan": 70, "violet": 80
     },
     "Gün Batımı (Sunset)": {
-        "red": 35, "green": 10, "royal_blue": 45, "blue": 30, "white": 5, "uv": 10, "mint": 5, "cyan": 15, "violet": 25
+        "red": 45, "green": 15, "royal_blue": 55, "blue": 40, "white": 10, "uv": 25, "mint": 10, "cyan": 25, "violet": 40
     },
     "Ay Işığı / Gece (Moonlight)": {
-        "red": 0, "green": 0, "royal_blue": 8, "blue": 4, "white": 0, "uv": 0, "mint": 0, "cyan": 2, "violet": 4
+        "red": 0, "green": 0, "royal_blue": 25, "blue": 20, "white": 0, "uv": 10, "mint": 0, "cyan": 8, "violet": 20
     },
     "Derin Deniz (Deep Blue)": {
         "red": 0, "green": 5, "royal_blue": 100, "blue": 100, "white": 15, "uv": 85, "mint": 10, "cyan": 50, "violet": 90

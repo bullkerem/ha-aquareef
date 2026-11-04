@@ -131,7 +131,7 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.sim_end_time: str = "21:30"
         self.sim_moon_end_time: str = "23:30"
         self.sim_ramp_minutes: int = 60
-        self.sim_moon_level: int = 8
+        self.sim_moon_level: int = 15
         self.simulation_phase: str = "☀️ Gün Simülasyonu"
 
         # Manual Time-Slot Schedule ("Hangi Saat Hangi Işık Yansın")
@@ -175,6 +175,7 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_http_poll_ts: float = 0.0
         self._last_sim_hw_sync_ts: float = 0.0
         self._last_sim_synced_phase: str = ""
+        self._sim_preview_until_ts: float = 0.0
 
         # Periodic 60s timer for Day Simulation and Manual Time Schedule
         self._unsub_sim_timer = async_track_time_interval(
@@ -342,13 +343,13 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             moon_ch = {
                 "red": 0,
                 "green": 0,
-                "royal_blue": max(1, int(round(moon_lvl * (peak["royal_blue"] / 100.0)))),
-                "blue": max(1, int(round(moon_lvl * 0.6 * (peak["blue"] / 100.0)))),
+                "royal_blue": max(5, int(round(moon_lvl * (peak["royal_blue"] / 100.0)))),
+                "blue": max(4, int(round(moon_lvl * 0.75 * (peak["blue"] / 100.0)))),
                 "white": 0,
-                "uv": int(round(moon_lvl * 0.3 * (peak["uv"] / 100.0))),
+                "uv": max(2, int(round(moon_lvl * 0.4 * (peak["uv"] / 100.0)))),
                 "mint": 0,
-                "cyan": int(round(moon_lvl * 0.3 * (peak["cyan"] / 100.0))),
-                "violet": max(1, int(round(moon_lvl * 0.7 * (peak["violet"] / 100.0)))),
+                "cyan": max(2, int(round(moon_lvl * 0.35 * (peak["cyan"] / 100.0)))),
+                "violet": max(4, int(round(moon_lvl * 0.8 * (peak["violet"] / 100.0)))),
             }
 
         t0 = start_min
@@ -433,6 +434,11 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not self.simulation_enabled and not self.schedule_enabled:
             return
 
+        now_ts = time.time()
+        # Hold nighttime preview when user manually clicks one of the 4 simulation profiles
+        if self.simulation_enabled and now_ts < self._sim_preview_until_ts:
+            return
+
         local_now = dt_util.now()
         minute_of_day = local_now.hour * 60 + local_now.minute
 
@@ -462,7 +468,6 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if new_is_on and sum(target_channels.values()) >= 25:
             self._last_active_channels = target_channels.copy()
 
-        now_ts = time.time()
         phase_changed = phase != self._last_sim_synced_phase
         power_changed = new_is_on != old_is_on
         periodic_due = (now_ts - self._last_sim_hw_sync_ts >= 600) and (max_channel_diff >= 3)
@@ -546,7 +551,7 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_sync_hardware(
         self, force_send: bool = False, ensure_manual_mode: bool = False
     ) -> None:
-        """Serialize 9 channels and send official 20-byte AquaReef 'm' frame over TCP port 8899."""
+        """Serialize 9 channels and send official 20-byte AquaReef PRO 4 'm' frame over TCP port 8899."""
         if not self.is_on:
             effective_channels = {k: 0 for k in CHANNEL_ORDER}
         else:
@@ -556,18 +561,21 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 for k in CHANNEL_ORDER
             }
 
-        # Official 20-byte AquaReef PRO 4 frame:
-        # byte 0: 0x6D ('m')
-        # byte 1..18: 9 channels * 2 bytes (big endian 16-bit: high byte, low byte)
+        # Official 20-byte AquaReef PRO 4 frame (Pro4DataAdapter.prepareManualData + DataHelper):
+        # byte 0: 0x6D ('m' - Manual control frame)
+        # byte 1..18: 9 channels * 2 bytes, where each channel level (0..100) is scaled by 40 (0..4000):
+        #   ByteTranslateFirst(val)  = (val * 40) // 256
+        #   ByteTranslateSecond(val) = (val * 40) % 256
         # byte 19: 0x00
         payload = bytearray(20)
         payload[0] = 0x6D  # 'm'
 
         idx = 1
         for ch in CHANNEL_ORDER:
-            val = effective_channels.get(ch, 0)
-            payload[idx] = (val >> 8) & 0xFF
-            payload[idx + 1] = val & 0xFF
+            val = max(0, min(100, int(effective_channels.get(ch, 0))))
+            pwm_val = val * 40
+            payload[idx] = (pwm_val // 256) & 0xFF
+            payload[idx + 1] = (pwm_val % 256) & 0xFF
             idx += 2
         payload[19] = 0x00
         payload_bytes = bytes(payload)
@@ -575,28 +583,20 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not force_send and payload_bytes == self._last_sent_payload and self._manual_mode_sent:
             return
 
-        need_mode_header = (not self._manual_mode_sent) or ensure_manual_mode
-
         async with self._socket_lock:
             for attempt in range(2):
                 elapsed = time.time() - self._last_tcp_close_ts
-                if elapsed < 0.30:
-                    await asyncio.sleep(0.30 - elapsed)
+                if elapsed < 0.25:
+                    await asyncio.sleep(0.25 - elapsed)
 
                 try:
                     reader, writer = await asyncio.wait_for(
                         asyncio.open_connection(self.host, self.port),
                         timeout=3.0,
                     )
-                    if need_mode_header or attempt > 0:
-                        writer.write(b"o" * 20)
-                        await writer.drain()
-                        await asyncio.sleep(0.25)
-                        self._manual_mode_sent = True
-
                     writer.write(payload_bytes)
                     await writer.drain()
-                    await asyncio.sleep(0.06)
+                    await asyncio.sleep(0.08)
 
                     writer.close()
                     try:
@@ -606,7 +606,8 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                     self._last_tcp_close_ts = time.time()
                     self._last_sent_payload = payload_bytes
-                    _LOGGER.debug("Synced AquaReef hardware frame: %s", payload_bytes.hex())
+                    self._manual_mode_sent = True
+                    _LOGGER.debug("Synced AquaReef PRO 4 hardware frame: %s", payload_bytes.hex())
                     return
                 except Exception as err:
                     self._last_tcp_close_ts = time.time()
@@ -621,6 +622,7 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_set_simulation(self, enabled: bool) -> None:
         """Enable or disable 24-hour day simulation."""
         self.simulation_enabled = enabled
+        self._sim_preview_until_ts = 0.0
         if enabled:
             self.schedule_enabled = False
             self.storm_enabled = False
@@ -659,12 +661,15 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         calc_ch, phase = self.compute_simulation_channels(minute_of_day)
 
         # If selected during night/low-light hours, apply a visible 50% preview of the profile
-        # so the user immediately sees the chosen preset on the physical aquarium light!
+        # and hold it for 10 minutes so the 60s timer does not immediately overwrite it!
         if sum(calc_ch.values()) < 45:
             peak = SIMULATION_PROFILES[profile]
             calc_ch = {k: max(0, min(100, int(round(peak[k] * 0.50)))) for k in CHANNEL_ORDER}
             short_p = profile.split("(")[0].strip()
-            phase = f"✨ {short_p} (Aktif)"
+            phase = f"✨ {short_p} (Aktif Önizleme)"
+            self._sim_preview_until_ts = time.time() + 600
+        else:
+            self._sim_preview_until_ts = 0.0
 
         self.channels = calc_ch
         self.simulation_phase = phase
@@ -865,6 +870,7 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Set individual channel brightness percentage (0-100)."""
         self.simulation_enabled = False
         self.schedule_enabled = False
+        self._sim_preview_until_ts = 0.0
         self.simulation_phase = "🎛️ Manuel Spektrum"
         self.current_mode = "Manuel"
         level_pct = max(0, min(100, int(level_pct)))
@@ -887,6 +893,7 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Set multiple or all channel percentages at once."""
         self.simulation_enabled = False
         self.schedule_enabled = False
+        self._sim_preview_until_ts = 0.0
         self.simulation_phase = "🎛️ Manuel Spektrum"
         self.current_mode = "Manuel"
         for ch, val in levels.items():
@@ -909,6 +916,7 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_set_power(self, power: bool) -> None:
         """Turn overall light on or off reliably."""
         self.is_on = power
+        self._sim_preview_until_ts = 0.0
         if not power:
             if sum(self.channels.values()) >= 20:
                 self._last_active_channels = self.channels.copy()
@@ -972,6 +980,7 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.simulation_enabled = False
         self.schedule_enabled = False
         self.storm_enabled = False
+        self._sim_preview_until_ts = 0.0
         self.simulation_phase = f"🎨 {mode}"
 
         if isinstance(preset_val, dict):
@@ -984,11 +993,17 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if sum(self.channels.values()) >= 20:
                     self._last_active_channels = self.channels.copy()
         elif mode == "Manuel":
+            self.simulation_phase = "🎛️ Manuel Spektrum"
             self.is_on = True
             if self.master_brightness == 0:
                 self.master_brightness = 255
-            if sum(self.channels.values()) < 20:
-                self.channels = self._last_active_channels.copy()
+            if sum(self.channels.values()) < 25:
+                if sum(self.custom_saved_channels.values()) >= 25:
+                    self.channels = self.custom_saved_channels.copy()
+                elif sum(self._last_active_channels.values()) >= 25:
+                    self.channels = self._last_active_channels.copy()
+                else:
+                    self.channels = {k: CHANNELS[k]["default"] for k in CHANNEL_ORDER}
 
         await self._async_sync_hardware(force_send=True)
         await self._async_save_settings()
