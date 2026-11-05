@@ -14,6 +14,7 @@ import aiohttp
 from aiohttp import BasicAuth
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -171,6 +172,11 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Concurrency & TCP protocol state
         self._socket_lock = asyncio.Lock()
         self._manual_mode_sent: bool = False
+        self._tcp_connected = False
+        self._http_online = False
+        self._last_tcp_error: str | None = None
+        self._last_tcp_response = ""
+        self._last_sent_channels: dict[str, int] = {}
         self._last_sent_payload: bytes = b""
         self._last_tcp_close_ts: float = 0.0
         self._last_http_poll_ts: float = 0.0
@@ -460,7 +466,7 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         old_is_on = self.is_on
         new_is_on = any(v > 0 for v in target_channels.values())
         max_channel_diff = max(
-            abs(target_channels.get(k, 0) - self.channels.get(k, 0)) for k in CHANNEL_ORDER
+            abs(target_channels.get(k, 0) - self._last_sent_channels.get(k, 0)) for k in CHANNEL_ORDER
         )
 
         self.channels = target_channels
@@ -471,12 +477,12 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         phase_changed = phase != self._last_sim_synced_phase
         power_changed = new_is_on != old_is_on
-        periodic_due = (now_ts - self._last_sim_hw_sync_ts >= 600) and (max_channel_diff >= 3)
+        periodic_due = max_channel_diff >= 1
 
         if phase_changed or power_changed or periodic_due:
+            await self._async_sync_hardware(force_send=power_changed)
             self._last_sim_synced_phase = phase
             self._last_sim_hw_sync_ts = now_ts
-            await self._async_sync_hardware(force_send=power_changed)
 
         self.async_set_updated_data(self._get_current_state())
 
@@ -495,8 +501,11 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 timeout = aiohttp.ClientTimeout(total=3)
                 async with aiohttp.ClientSession(auth=auth, timeout=timeout) as session:
                     async with session.get(url) as resp:
+                        self._http_online = False
+                        resp.raise_for_status()
                         if resp.status == 200:
                             text = await resp.text()
+                            self._http_online = "cover_sta_mac" in text
                             var_matches = re.findall(r'var\s+(\w+)\s*=\s*"([^"]*)";', text)
                             parsed = dict(var_matches)
 
@@ -509,45 +518,52 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             if raw_rssi.isdigit():
                                 self.rssi_pct = int(raw_rssi)
             except Exception as err:
-                _LOGGER.debug("HTTP status polling skipped/failed: %s", err)
+                self._http_online = False
+                _LOGGER.debug("HTTP status polling failed: %r", err)
 
         return self._get_current_state()
 
-    async def async_send_tcp_raw(self, payload: bytes, wait_response: bool = False) -> bytes:
-        """Send raw bytes over TCP to port 8899 in a thread-safe manner."""
+    async def async_send_tcp_raw(self, payload: bytes, wait_response: bool = False, *, enter_manual: bool = False) -> bytes:
+        """Send a TCP frame; socket success does not prove hardware application."""
         async with self._socket_lock:
             elapsed = time.time() - self._last_tcp_close_ts
             if elapsed < 0.30:
                 await asyncio.sleep(0.30 - elapsed)
-
+            writer = None
             try:
                 reader, writer = await asyncio.wait_for(
-                    asyncio.open_connection(self.host, self.port),
-                    timeout=3.0,
-                )
+                    asyncio.open_connection(self.host, self.port), timeout=3.0)
+                if enter_manual:
+                    # Restore the pre-2.1 manual-mode sequence on the same socket.
+                    writer.write(b"o" * 20)
+                    await asyncio.wait_for(writer.drain(), timeout=3.0)
+                    await asyncio.sleep(0.25)
                 writer.write(payload)
-                await writer.drain()
-
-                resp = b""
+                await asyncio.wait_for(writer.drain(), timeout=3.0)
+                response = b""
                 if wait_response:
                     try:
-                        resp = await asyncio.wait_for(reader.read(1024), timeout=1.0)
+                        response = await asyncio.wait_for(reader.read(1024), timeout=1.0)
                     except asyncio.TimeoutError:
-                        pass
+                        pass  # No ACK format has been verified for this firmware.
                 else:
-                    await asyncio.sleep(0.06)
-
-                writer.close()
-                try:
-                    await asyncio.wait_for(writer.wait_closed(), timeout=1.0)
-                except Exception:
-                    pass
-                self._last_tcp_close_ts = time.time()
-                return resp
+                    await asyncio.sleep(0.08)
+                self._tcp_connected = True
+                self._last_tcp_error = None
+                return response
             except Exception as err:
-                self._last_tcp_close_ts = time.time()
-                _LOGGER.error("Failed to send TCP command to AquaReef (%s): %s", self.host, err)
+                self._tcp_connected = False
+                self._last_tcp_error = f"{type(err).__name__}: {err}"
+                _LOGGER.error("AquaReef TCP %s:%s failed: %r", self.host, self.port, err)
                 raise
+            finally:
+                if writer is not None:
+                    writer.close()
+                    try:
+                        await asyncio.wait_for(writer.wait_closed(), timeout=1.0)
+                    except Exception:
+                        pass
+                self._last_tcp_close_ts = time.time()
 
     async def _async_sync_hardware(
         self, force_send: bool = False, ensure_manual_mode: bool = False
@@ -584,41 +600,38 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not force_send and payload_bytes == self._last_sent_payload and self._manual_mode_sent:
             return
 
-        async with self._socket_lock:
-            for attempt in range(2):
-                elapsed = time.time() - self._last_tcp_close_ts
-                if elapsed < 0.25:
-                    await asyncio.sleep(0.25 - elapsed)
-
-                try:
-                    reader, writer = await asyncio.wait_for(
-                        asyncio.open_connection(self.host, self.port),
-                        timeout=3.0,
-                    )
-                    writer.write(payload_bytes)
-                    await writer.drain()
-                    await asyncio.sleep(0.08)
-
-                    writer.close()
-                    try:
-                        await asyncio.wait_for(writer.wait_closed(), timeout=1.0)
-                    except Exception:
-                        pass
-
-                    self._last_tcp_close_ts = time.time()
-                    self._last_sent_payload = payload_bytes
-                    self._manual_mode_sent = True
-                    _LOGGER.debug("Synced AquaReef PRO 4 hardware frame: %s", payload_bytes.hex())
-                    return
-                except Exception as err:
-                    self._last_tcp_close_ts = time.time()
-                    if attempt == 0:
-                        _LOGGER.debug("Retrying AquaReef TCP sync after error: %s", err)
-                        await asyncio.sleep(0.35)
-                    else:
-                        _LOGGER.error(
-                            "Failed to sync AquaReef hardware over TCP (%s): %s", self.host, err
-                        )
+        for attempt in range(2):
+            try:
+                response = await self.async_send_tcp_raw(
+                    payload_bytes, wait_response=True,
+                    enter_manual=(ensure_manual_mode or not self._manual_mode_sent or attempt > 0),
+                )
+                self._last_tcp_response = response.hex()
+                self._last_sent_payload = payload_bytes
+                self._last_sent_channels = self.channels.copy()
+                self._manual_mode_sent = True
+                _LOGGER.debug("TCP frame sent (not device-confirmed): %s; response=%s",
+                              payload_bytes.hex(), self._last_tcp_response or "none")
+                return
+            except Exception as err:
+                if attempt == 0:
+                    await asyncio.sleep(0.35)
+                    continue
+                self._manual_mode_sent = False
+                # Restore the last published settings when transmission fails.
+                if self.data:
+                    for key in ("is_on", "master_brightness", "current_mode", "channels",
+                                "simulation_enabled", "simulation_profile", "simulation_phase",
+                                "schedule_enabled", "schedule_slots", "storm_enabled",
+                                "cloud_enabled", "sim_start_time", "sim_end_time",
+                                "sim_moon_end_time", "sim_ramp_minutes", "sim_moon_level"):
+                        if key in self.data:
+                            value = self.data[key]
+                            setattr(self, key, value.copy() if isinstance(value, dict) else value)
+                self.async_set_updated_data(self._get_current_state())
+                raise HomeAssistantError(
+                    f"AquaReef {self.host}:{self.port}: {type(err).__name__}: {err}"
+                ) from err
 
     async def async_set_simulation(self, enabled: bool) -> None:
         """Enable or disable 24-hour day simulation."""
@@ -1031,8 +1044,12 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _get_current_state(self) -> dict[str, Any]:
         """Return dict representing current state for coordinator listeners."""
         return {
-            "online": True,
-            "tcp_connected": True,
+            "online": self._http_online or self._tcp_connected,
+            "tcp_connected": self._tcp_connected,
+            "http_online": self._http_online,
+            "last_tcp_error": self._last_tcp_error,
+            "last_tcp_response": self._last_tcp_response,
+            "hardware_confirmed": False,
             "rssi_pct": self.rssi_pct,
             "rssi_dbm": round((self.rssi_pct / 2) - 100) if self.rssi_pct else None,
             "ssid": self.ssid,

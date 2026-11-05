@@ -43,6 +43,7 @@ async def async_setup_entry(
 class AquaReefMasterLight(CoordinatorEntity[AquaReefCoordinator], LightEntity):
     """Representation of the AquaReef Master Light fixture."""
 
+    _attr_assumed_state = True
     _attr_color_mode = ColorMode.BRIGHTNESS
     _attr_supported_color_modes = {ColorMode.BRIGHTNESS}
     _attr_has_entity_name = True
@@ -80,6 +81,10 @@ class AquaReefMasterLight(CoordinatorEntity[AquaReefCoordinator], LightEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra state attributes."""
         return {
+            "tcp_last_send_ok": self.coordinator._tcp_connected,
+            "last_tcp_error": self.coordinator._last_tcp_error,
+            "last_tcp_response": self.coordinator._last_tcp_response,
+            "hardware_confirmed": False,
             "mode": self.coordinator.current_mode,
             "simulation_enabled": self.coordinator.simulation_enabled,
             "simulation_profile": self.coordinator.simulation_profile,
@@ -109,6 +114,7 @@ class AquaReefMasterLight(CoordinatorEntity[AquaReefCoordinator], LightEntity):
 class AquaReefChannelLight(CoordinatorEntity[AquaReefCoordinator], LightEntity):
     """Representation of an individual AquaReef spectral channel."""
 
+    _attr_assumed_state = True
     _attr_color_mode = ColorMode.BRIGHTNESS
     _attr_supported_color_modes = {ColorMode.BRIGHTNESS}
     _attr_has_entity_name = True

@@ -1,479 +1,634 @@
-# ==============================================================================
-# AquaReef PRO 4 - Lovelace Akvaryum Kontrolü Kartı ve Geniş Ayar Popup'ı (v2.0)
-# Gerekli HACS Eklentileri:
-#   - custom:button-card
-#   - custom:vertical-stack-in-card
-#   - card-mod
-#   - browser_mod
-# ==============================================================================
-
-type: custom:vertical-stack-in-card
-card_mod:
-  style: |
-    ha-card {
-      background: #FFFFFF !important;
-      border: 1px solid #EAECEF !important;
-      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03) !important;
-      border-radius: 16px !important;
-      padding: 8px 10px !important;
-      box-sizing: border-box !important;
-    }
-    ha-card > div, #root {
-      display: flex !important;
-      flex-direction: column !important;
-      gap: 7px !important;
-    }
-cards:
-  # ----------------------------------------------------------------------------
-  # 1. ÜST DURUM ÇUBUĞU + DOĞRUDAN AÇ / KAPAT (light.toggle)
-  # ----------------------------------------------------------------------------
-  - type: custom:button-card
-    entity: light.aquareef_pro_4_ana_aydinlatma_master
-    triggers_update: all
-    show_icon: false
-    show_name: false
-    show_state: false
-    tap_action:
-      action: call-service
-      service: light.toggle
-      target:
-        entity_id: light.aquareef_pro_4_ana_aydinlatma_master
-    styles:
-      card:
-        - background: transparent
-        - border: 0
-        - box-shadow: none
-        - padding: 0
-        - margin: 0
-      grid:
-        - grid-template-areas: '"bar"'
-        - grid-template-columns: minmax(0, 1fr)
-    custom_fields:
-      bar: |
-        [[[
-          const master = states['light.aquareef_pro_4_ana_aydinlatma_master'];
-          const isOn = master?.state === 'on';
-          const bri = master?.attributes?.brightness ? Math.round((master.attributes.brightness / 255) * 100) : 0;
-          const isSim = states['switch.aquareef_pro_4_gun_simulasyonu']?.state === 'on';
-          const isSched = states['switch.akvaryum_kontrolu_manuel_saat_programi']?.state === 'on';
-          const phase = states['sensor.aquareef_pro_4_gun_simulasyonu_fazi']?.state || 'Manuel';
-          const activeEffect = states['sensor.aquareef_pro_4_aktif_efekt_profil']?.state || 'Manuel';
-          const simProf = states['select.akvaryum_kontrolu_gun_simulasyonu_profili']?.state || '1. Karışık Resif';
-          const simStart = states['select.akvaryum_kontrolu_gun_simulasyonu_baslangic_saati']?.state || '08:30';
-          const simEnd = states['select.akvaryum_kontrolu_gun_simulasyonu_kapanis_saati']?.state || '21:30';
-          const moonEnd = states['select.akvaryum_kontrolu_gece_ay_isigi_bitis_saati']?.state || '23:30';
-          const pwrBg = isOn ? 'linear-gradient(135deg,#0EA5E9,#0284C7)' : '#F1F5F9';
-          const pwrClr = isOn ? '#FFFFFF' : '#475569';
-          const pwrBdr = isOn ? '#0284C7' : '#CBD5E1';
-          return `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-radius:12px;background:${isOn ? 'linear-gradient(135deg,#F0F9FF 0%,#E0F2FE 100%)' : '#F8FAFC'};border:1.5px solid ${isOn ? '#38BDF8' : '#E2E8F0'};font-family:Inter,-apple-system,sans-serif;gap:8px;flex-wrap:wrap;">
-              <div style="display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap;">
-                <span style="width:30px;height:30px;border-radius:9px;background:${isOn ? '#0284C7' : '#E2E8F0'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:${isOn ? '0 2px 8px rgba(2,132,199,0.35)' : 'none'};">
-                  <ha-icon icon="mdi:aquarium" style="--mdc-icon-size:17px;color:${isOn ? '#FFFFFF' : '#64748B'};"></ha-icon>
-                </span>
-                <div style="display:flex;flex-direction:column;min-width:0;">
-                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                    <span style="font-size:13px;font-weight:800;color:#0F172A;">🐠 Akvaryum Aydınlatma</span>
-                    <span style="font-size:10.5px;font-weight:800;color:${isOn ? '#0369A1' : '#64748B'};background:${isOn ? '#FFFFFF' : '#E2E8F0'};padding:2px 7px;border-radius:999px;border:1px solid ${isOn ? '#BAE6FD' : 'transparent'};">
-                      ${isOn ? 'AÇIK • %' + bri : 'KAPALI'}
-                    </span>
-                    <span style="font-size:10.5px;font-weight:700;color:#4F46E5;background:#EEF2FF;padding:2px 7px;border-radius:999px;">
-                      ${isSim ? '🌅 Simülasyon: ' + simProf.split('(')[0].trim() : (isSched ? '⏰ Saat Programı Aktif' : '🎚️ ' + activeEffect)}
-                    </span>
-                  </div>
-                  <div style="font-size:11px;font-weight:600;color:#0369A1;margin-top:2px;">
-                    ${isSim ? '🕒 Açılış: ' + simStart + ' • Kapanış: ' + simEnd + ' (Ay: ' + moonEnd + ') • Faz: ' + phase : (isSched ? '🕒 Aktif Dilim: ' + phase : 'Durum: ' + phase)}
-                  </div>
-                </div>
-              </div>
-              <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:9px;background:${pwrBg};color:${pwrClr};border:1px solid ${pwrBdr};font-size:11.5px;font-weight:800;cursor:pointer;">
-                <ha-icon icon="${isOn ? 'mdi:power' : 'mdi:power-off'}" style="--mdc-icon-size:15px;color:${pwrClr};"></ha-icon>
-                <span>${isOn ? 'KAPAT' : 'AÇ'}</span>
-              </div>
-            </div>
-          `;
-        ]]]
-
-  # ----------------------------------------------------------------------------
-  # 2. HAZIR 4 GÜN SİMÜLASYONU SEÇENEĞİ (TEK DOKUNUŞLA SEÇİM)
-  # ----------------------------------------------------------------------------
-  - type: horizontal-stack
-    cards:
-      - type: custom:button-card
-        entity: select.akvaryum_kontrolu_gun_simulasyonu_profili
-        triggers_update: all
-        name: "🌊 1. Karışık Resif"
-        show_icon: false
-        show_state: false
-        tap_action:
-          action: call-service
-          service: button.press
-          target:
-            entity_id: button.akvaryum_kontrolu_simulasyon_secenek_1_karisik_resif
-        styles:
-          card:
-            - height: 34px
-            - border-radius: 10px
-            - padding: 2px 4px
-            - background: |
-                [[[
-                  const isSim = states['switch.aquareef_pro_4_gun_simulasyonu']?.state === 'on';
-                  const p = states['select.akvaryum_kontrolu_gun_simulasyonu_profili']?.state || '';
-                  return (isSim && p.startsWith('1.')) ? 'linear-gradient(135deg,#0284C7,#0369A1)' : '#F8FAFC';
-                ]]]
-            - border: |
-                [[[
-                  const isSim = states['switch.aquareef_pro_4_gun_simulasyonu']?.state === 'on';
-                  const p = states['select.akvaryum_kontrolu_gun_simulasyonu_profili']?.state || '';
-                  return (isSim && p.startsWith('1.')) ? '1.5px solid #0284C7' : '1px solid #E2E8F0';
-                ]]]
-          name:
-            - font-size: 11px
-            - font-weight: 800
-            - color: |
-                [[[
-                  const isSim = states['switch.aquareef_pro_4_gun_simulasyonu']?.state === 'on';
-                  const p = states['select.akvaryum_kontrolu_gun_simulasyonu_profili']?.state || '';
-                  return (isSim && p.startsWith('1.')) ? '#FFFFFF' : '#1E293B';
-                ]]]
-
-      - type: custom:button-card
-        entity: select.akvaryum_kontrolu_gun_simulasyonu_profili
-        triggers_update: all
-        name: "🪸 2. SPS Mercan"
-        show_icon: false
-        show_state: false
-        tap_action:
-          action: call-service
-          service: button.press
-          target:
-            entity_id: button.akvaryum_kontrolu_simulasyon_secenek_2_sps_mercan
-        styles:
-          card:
-            - height: 34px
-            - border-radius: 10px
-            - padding: 2px 4px
-            - background: |
-                [[[
-                  const isSim = states['switch.aquareef_pro_4_gun_simulasyonu']?.state === 'on';
-                  const p = states['select.akvaryum_kontrolu_gun_simulasyonu_profili']?.state || '';
-                  return (isSim && p.startsWith('2.')) ? 'linear-gradient(135deg,#2563EB,#1D4ED8)' : '#F8FAFC';
-                ]]]
-            - border: |
-                [[[
-                  const isSim = states['switch.aquareef_pro_4_gun_simulasyonu']?.state === 'on';
-                  const p = states['select.akvaryum_kontrolu_gun_simulasyonu_profili']?.state || '';
-                  return (isSim && p.startsWith('2.')) ? '1.5px solid #2563EB' : '1px solid #E2E8F0';
-                ]]]
-          name:
-            - font-size: 11px
-            - font-weight: 800
-            - color: |
-                [[[
-                  const isSim = states['switch.aquareef_pro_4_gun_simulasyonu']?.state === 'on';
-                  const p = states['select.akvaryum_kontrolu_gun_simulasyonu_profili']?.state || '';
-                  return (isSim && p.startsWith('2.')) ? '#FFFFFF' : '#1E293B';
-                ]]]
-
-      - type: custom:button-card
-        entity: select.akvaryum_kontrolu_gun_simulasyonu_profili
-        triggers_update: all
-        name: "🟣 3. LPS Floresan"
-        show_icon: false
-        show_state: false
-        tap_action:
-          action: call-service
-          service: button.press
-          target:
-            entity_id: button.akvaryum_kontrolu_simulasyon_secenek_3_lps_floresan
-        styles:
-          card:
-            - height: 34px
-            - border-radius: 10px
-            - padding: 2px 4px
-            - background: |
-                [[[
-                  const isSim = states['switch.aquareef_pro_4_gun_simulasyonu']?.state === 'on';
-                  const p = states['select.akvaryum_kontrolu_gun_simulasyonu_profili']?.state || '';
-                  return (isSim && p.startsWith('3.')) ? 'linear-gradient(135deg,#7C3AED,#6D28D9)' : '#F8FAFC';
-                ]]]
-            - border: |
-                [[[
-                  const isSim = states['switch.aquareef_pro_4_gun_simulasyonu']?.state === 'on';
-                  const p = states['select.akvaryum_kontrolu_gun_simulasyonu_profili']?.state || '';
-                  return (isSim && p.startsWith('3.')) ? '1.5px solid #7C3AED' : '1px solid #E2E8F0';
-                ]]]
-          name:
-            - font-size: 11px
-            - font-weight: 800
-            - color: |
-                [[[
-                  const isSim = states['switch.aquareef_pro_4_gun_simulasyonu']?.state === 'on';
-                  const p = states['select.akvaryum_kontrolu_gun_simulasyonu_profili']?.state || '';
-                  return (isSim && p.startsWith('3.')) ? '#FFFFFF' : '#1E293B';
-                ]]]
-
-      - type: custom:button-card
-        entity: select.akvaryum_kontrolu_gun_simulasyonu_profili
-        triggers_update: all
-        name: "☀️ 4. Doğal Gün"
-        show_icon: false
-        show_state: false
-        tap_action:
-          action: call-service
-          service: button.press
-          target:
-            entity_id: button.akvaryum_kontrolu_simulasyon_secenek_4_dogal_gun_isigi
-        styles:
-          card:
-            - height: 34px
-            - border-radius: 10px
-            - padding: 2px 4px
-            - background: |
-                [[[
-                  const isSim = states['switch.aquareef_pro_4_gun_simulasyonu']?.state === 'on';
-                  const p = states['select.akvaryum_kontrolu_gun_simulasyonu_profili']?.state || '';
-                  return (isSim && p.startsWith('4.')) ? 'linear-gradient(135deg,#F59E0B,#D97706)' : '#F8FAFC';
-                ]]]
-            - border: |
-                [[[
-                  const isSim = states['switch.aquareef_pro_4_gun_simulasyonu']?.state === 'on';
-                  const p = states['select.akvaryum_kontrolu_gun_simulasyonu_profili']?.state || '';
-                  return (isSim && p.startsWith('4.')) ? '1.5px solid #F59E0B' : '1px solid #E2E8F0';
-                ]]]
-          name:
-            - font-size: 11px
-            - font-weight: 800
-            - color: |
-                [[[
-                  const isSim = states['switch.aquareef_pro_4_gun_simulasyonu']?.state === 'on';
-                  const p = states['select.akvaryum_kontrolu_gun_simulasyonu_profili']?.state || '';
-                  return (isSim && p.startsWith('4.')) ? '#FFFFFF' : '#1E293B';
-                ]]]
-
-  # ----------------------------------------------------------------------------
-  # 3. HIZLI MOD & EFEKT BUTONLARI (Saat Programı, Gün Ortası, Ay Işığı, Bulut, Fırtına)
-  # ----------------------------------------------------------------------------
-  - type: horizontal-stack
-    cards:
-      - type: custom:button-card
-        entity: switch.akvaryum_kontrolu_manuel_saat_programi
-        name: "⏰ Saat Prog."
-        show_icon: false
-        show_state: false
-        tap_action:
-          action: call-service
-          service: switch.toggle
-          target:
-            entity_id: switch.akvaryum_kontrolu_manuel_saat_programi
-      - type: custom:button-card
-        entity: button.aquareef_pro_4_gun_ortasi_modu_midday
-        name: "☀️ Gün Ortası"
-        show_icon: false
-        show_state: false
-        tap_action:
-          action: call-service
-          service: button.press
-          target:
-            entity_id: button.aquareef_pro_4_gun_ortasi_modu_midday
-      - type: custom:button-card
-        entity: button.aquareef_pro_4_ay_isigi_gece_modu_moonlight
-        name: "🌙 Ay Işığı"
-        show_icon: false
-        show_state: false
-        tap_action:
-          action: call-service
-          service: button.press
-          target:
-            entity_id: button.aquareef_pro_4_ay_isigi_gece_modu_moonlight
-      - type: custom:button-card
-        entity: switch.aquareef_pro_4_bulut_efekti
-        name: "☁️ Bulut"
-        show_icon: false
-        show_state: false
-        tap_action:
-          action: call-service
-          service: switch.toggle
-          target:
-            entity_id: switch.aquareef_pro_4_bulut_efekti
-      - type: custom:button-card
-        entity: switch.aquareef_pro_4_firtina_simsek_efekti
-        name: "⚡ Fırtına"
-        show_icon: false
-        show_state: false
-        tap_action:
-          action: call-service
-          service: switch.toggle
-          target:
-            entity_id: switch.aquareef_pro_4_firtina_simsek_efekti
-
-  # ----------------------------------------------------------------------------
-  # 4. CANLI 9 KANAL SPEKTRUM ÖZETİ + GENİŞ POPUP AÇMA BUTONU
-  # ----------------------------------------------------------------------------
-  - type: custom:button-card
-    entity: light.aquareef_pro_4_ana_aydinlatma_master
-    triggers_update: all
-    show_icon: false
-    show_name: false
-    show_state: false
-    styles:
-      card:
-        - background: transparent
-        - border: 0
-        - box-shadow: none
-        - padding: 0
-      grid:
-        - grid-template-areas: '"spec"'
-        - grid-template-columns: minmax(0, 1fr)
-    custom_fields:
-      spec: |
-        [[[
-          const pct = (id) => Math.round(parseFloat(states[id]?.state || '0') || 0);
-          const uv = pct('number.akvaryum_kontrolu_seviye_uv_mor');
-          const rb = pct('number.akvaryum_kontrolu_seviye_royal_blue');
-          const bl = pct('number.akvaryum_kontrolu_seviye_mavi_blue');
-          const vi = pct('number.akvaryum_kontrolu_seviye_menekse_violet');
-          const cy = pct('number.akvaryum_kontrolu_seviye_turkuaz_cyan');
-          const mn = pct('number.akvaryum_kontrolu_seviye_nane_mint');
-          const gr = pct('number.akvaryum_kontrolu_seviye_amber_yesil');
-          const rd = pct('number.akvaryum_kontrolu_seviye_kirmizi_red');
-          const wh = pct('number.akvaryum_kontrolu_seviye_beyaz_white');
-          return `
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 10px;border-radius:11px;background:#F8FAFC;border:1px solid #E2E8F0;flex-wrap:wrap;">
-              <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
-                <span style="font-size:10px;font-weight:700;color:#7C3AED;background:#F3E8FF;padding:2px 6px;border-radius:6px;">UV %${uv}</span>
-                <span style="font-size:10px;font-weight:700;color:#1D4ED8;background:#DBEAFE;padding:2px 6px;border-radius:6px;">R.Blue %${rb}</span>
-                <span style="font-size:10px;font-weight:700;color:#0284C7;background:#E0F2FE;padding:2px 6px;border-radius:6px;">Mavi %${bl}</span>
-                <span style="font-size:10px;font-weight:700;color:#4F46E5;background:#EEF2FF;padding:2px 6px;border-radius:6px;">Mor %${vi}</span>
-                <span style="font-size:10px;font-weight:700;color:#0891B2;background:#CFFAFE;padding:2px 6px;border-radius:6px;">Turkuaz %${cy}</span>
-                <span style="font-size:10px;font-weight:700;color:#0D9488;background:#CCFBF1;padding:2px 6px;border-radius:6px;">Nane %${mn}</span>
-                <span style="font-size:10px;font-weight:700;color:#15803D;background:#DCFCE7;padding:2px 6px;border-radius:6px;">Yeşil %${gr}</span>
-                <span style="font-size:10px;font-weight:700;color:#DC2626;background:#FEE2E2;padding:2px 6px;border-radius:6px;">Kırmızı %${rd}</span>
-                <span style="font-size:10px;font-weight:700;color:#475569;background:#E2E8F0;padding:2px 6px;border-radius:6px;">Beyaz %${wh}</span>
-              </div>
-              <span style="font-size:11px;font-weight:800;color:#FFFFFF;background:linear-gradient(135deg,#4F46E5,#7C3AED);padding:5px 12px;border-radius:8px;">
-                ⚙️ Saat, Simülasyon & Manuel Işık Ayarları ↗
-              </span>
-            </div>
-          `;
-        ]]]
-    tap_action:
-      action: fire-dom-event
-      browser_mod:
-        service: browser_mod.popup
-        data:
-          title: "🐠 Akvaryum Kontrolü — Gün Simülasyonu, Saat Programı & Manuel Işık Ayarları"
-          size: wide
-          content:
-            type: vertical-stack
-            cards:
-              - type: entities
-                title: "💡 1. Ana Aydınlatma & Çalışma Modu"
-                show_header_toggle: false
-                entities:
-                  - entity: light.aquareef_pro_4_ana_aydinlatma_master
-                    name: Ana Aydınlatma (Aç / Kapat & Parlaklık)
-                  - entity: select.aquareef_pro_4_calisma_modu_efekt
-                    name: Çalışma Modu / Hazır Efekt Seçimi
-                  - entity: sensor.aquareef_pro_4_gun_simulasyonu_fazi
-                    name: Anlık Çalışma Fazı
-                  - entity: sensor.aquareef_pro_4_aktif_efekt_profil
-                    name: Aktif Mod
-
-              - type: entities
-                title: "🌅 2. Gün Simülasyonu Ayarları (4 Hazır Seçenek & Saatler)"
-                show_header_toggle: false
-                entities:
-                  - entity: switch.aquareef_pro_4_gun_simulasyonu
-                    name: Otomatik Gün Simülasyonu (Aç / Kapat)
-                  - entity: select.akvaryum_kontrolu_gun_simulasyonu_profili
-                    name: Gün Simülasyonu Profili (Hazır 4 Seçenek)
-                  - entity: select.akvaryum_kontrolu_gun_simulasyonu_baslangic_saati
-                    name: Saat Kaçta Çalışsın? (Gün Doğumu Başlangıcı)
-                  - entity: select.akvaryum_kontrolu_gun_simulasyonu_kapanis_saati
-                    name: Saat Kaçta Kapansın? (Gün Batımı Bitişi)
-                  - entity: select.akvaryum_kontrolu_gece_ay_isigi_bitis_saati
-                    name: Gece Ay Işığı Tam Kapanış Saati
-                  - entity: number.akvaryum_kontrolu_gun_dogumu_batimi_gecis_suresi
-                    name: Gün Doğumu / Batımı Yumuşak Geçiş Süresi (dk)
-                  - entity: number.akvaryum_kontrolu_gece_ay_isigi_seviyesi
-                    name: Gece Ay Işığı Parlaklık Seviyesi (%)
-
-              - type: entities
-                title: "⏰ 3. Manuel Saat Programı (Hangi Saat Hangi Işık Yansın)"
-                show_header_toggle: false
-                entities:
-                  - entity: switch.akvaryum_kontrolu_manuel_saat_programi
-                    name: Manuel Saat Programını Aktif Et (Aç / Kapat)
-                  - type: section
-                    label: "🌅 1. Zaman Dilimi (Sabah)"
-                  - entity: select.akvaryum_kontrolu_1_dilim_sabah_saat_araligi
-                    name: 1. Dilim Saat Aralığı
-                  - entity: select.akvaryum_kontrolu_1_dilim_sabah_yanan_isik
-                    name: 1. Dilim Yanan Işık Kombinasyonu
-                  - entity: number.akvaryum_kontrolu_1_dilim_sabah_parlakligi
-                    name: 1. Dilim Parlaklık (%)
-                  - type: section
-                    label: "☀️ 2. Zaman Dilimi (Öğle / Gün Ortası)"
-                  - entity: select.akvaryum_kontrolu_2_dilim_ogle_saat_araligi
-                    name: 2. Dilim Saat Aralığı
-                  - entity: select.akvaryum_kontrolu_2_dilim_ogle_yanan_isik
-                    name: 2. Dilim Yanan Işık Kombinasyonu
-                  - entity: number.akvaryum_kontrolu_2_dilim_ogle_parlakligi
-                    name: 2. Dilim Parlaklık (%)
-                  - type: section
-                    label: "🌇 3. Zaman Dilimi (Akşam)"
-                  - entity: select.akvaryum_kontrolu_3_dilim_aksam_saat_araligi
-                    name: 3. Dilim Saat Aralığı
-                  - entity: select.akvaryum_kontrolu_3_dilim_aksam_yanan_isik
-                    name: 3. Dilim Yanan Işık Kombinasyonu
-                  - entity: number.akvaryum_kontrolu_3_dilim_aksam_parlakligi
-                    name: 3. Dilim Parlaklık (%)
-                  - type: section
-                    label: "🌙 4. Zaman Dilimi (Gece / Ay Işığı)"
-                  - entity: select.akvaryum_kontrolu_4_dilim_gece_saat_araligi
-                    name: 4. Dilim Saat Aralığı
-                  - entity: select.akvaryum_kontrolu_4_dilim_gece_yanan_isik
-                    name: 4. Dilim Yanan Işık Kombinasyonu
-                  - entity: number.akvaryum_kontrolu_4_dilim_gece_parlakligi
-                    name: 4. Dilim Parlaklık (%)
-
-              - type: entities
-                title: "🎚️ 4. Manuel 9-Kanal Işık Seviyeleri (%0 - %100)"
-                show_header_toggle: false
-                entities:
-                  - entity: number.akvaryum_kontrolu_seviye_uv_mor
-                    name: 🟣 Kanal 6 — UV Mor (%)
-                  - entity: number.akvaryum_kontrolu_seviye_royal_blue
-                    name: 🌊 Kanal 3 — Royal Blue (%)
-                  - entity: number.akvaryum_kontrolu_seviye_mavi_blue
-                    name: 🔷 Kanal 4 — Mavi / Blue (%)
-                  - entity: number.akvaryum_kontrolu_seviye_menekse_violet
-                    name: 🔮 Kanal 9 — Menekşe / Violet (%)
-                  - entity: number.akvaryum_kontrolu_seviye_turkuaz_cyan
-                    name: 💎 Kanal 8 — Turkuaz / Cyan (%)
-                  - entity: number.akvaryum_kontrolu_seviye_nane_mint
-                    name: 🧪 Kanal 7 — Nane / Mint (%)
-                  - entity: number.akvaryum_kontrolu_seviye_amber_yesil
-                    name: 🟢 Kanal 2 — Amber / Yeşil (%)
-                  - entity: number.akvaryum_kontrolu_seviye_kirmizi_red
-                    name: 🔴 Kanal 1 — Kırmızı / Red (%)
-                  - entity: number.akvaryum_kontrolu_seviye_beyaz_white
-                    name: ☀️ Kanal 5 — Beyaz / White (%)
-                  - entity: button.akvaryum_kontrolu_ozel_spektrum_olarak_kaydet
-                    name: 💾 Mevcut 9 Kanal Ayarını Özel Spektrum Olarak Kaydet
-
-              - type: entities
-                title: "📡 5. Cihaz & Bağlantı Durumu"
-                show_header_toggle: false
-                entities:
-                  - entity: sensor.aquareef_pro_4_tcp_kontrol_baglantisi
-                    name: TCP Kontrol Bağlantısı
-                  - entity: sensor.aquareef_pro_4_ip_adresi
-                    name: IP Adresi
-                  - entity: sensor.aquareef_pro_4_wi_fi_sinyal_gucu
-                    name: Wi-Fi Sinyal Gücü
-                  - entity: button.aquareef_pro_4_durumu_yenile
-                    name: Durumu Yenile
-                  - entity: button.aquareef_pro_4_cihazi_yeniden_baslat_reboot
-                    name: Cihazı Yeniden Başlat (Reboot)
+{
+  "type": "custom:mod-card",
+  "card_mod": {
+    "style": "ha-card {background:#e8f0fa;border-radius:22px;padding:12px;box-shadow:0 5px 18px #17194e12;--stack-card-gap:10px;}"
+  },
+  "card": {
+    "type": "vertical-stack",
+    "cards": [
+      {
+        "type": "grid",
+        "columns": 3,
+        "square": false,
+        "cards": [
+          {
+            "type": "custom:button-card",
+            "entity": "light.aquareef_pro_4_ana_aydinlatma_master",
+            "name": "Gün Simülasyonu",
+            "icon": "mdi:weather-sunny",
+            "show_state": false,
+            "triggers_update": [
+              "switch.aquareef_pro_4_gun_simulasyonu"
+            ],
+            "tap_action": {
+              "action": "call-service",
+              "service": "aquareef.apply_preset",
+              "service_data": {
+                "preset": "Gün Simülasyonu"
+              }
+            },
+            "styles": {
+              "card": [
+                {
+                  "height": "74px"
+                },
+                {
+                  "border-radius": "16px"
+                },
+                {
+                  "padding": "10px 4px"
+                },
+                {
+                  "border": "none"
+                },
+                {
+                  "background": "#edf4fc"
+                },
+                {
+                  "box-shadow": "4px 4px 10px #d5dfec,-4px -4px 10px #fff"
+                }
+              ],
+              "icon": [
+                {
+                  "width": "23px"
+                },
+                {
+                  "color": "#efb816"
+                }
+              ],
+              "name": [
+                {
+                  "font-size": "11px"
+                },
+                {
+                  "font-weight": "600"
+                },
+                {
+                  "color": "#303456"
+                },
+                {
+                  "white-space": "normal"
+                }
+              ]
+            },
+            "state": [
+              {
+                "operator": "template",
+                "value": "[[[ return states['switch.aquareef_pro_4_gun_simulasyonu']?.state === 'on'; ]]]",
+                "styles": {
+                  "card": [
+                    {
+                      "background": "#efb816"
+                    },
+                    {
+                      "box-shadow": "inset 2px 2px 5px #00000020"
+                    }
+                  ],
+                  "icon": [
+                    {
+                      "color": "#ffffff"
+                    }
+                  ],
+                  "name": [
+                    {
+                      "color": "#ffffff"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "type": "custom:button-card",
+            "entity": "light.aquareef_pro_4_ana_aydinlatma_master",
+            "name": "Ay Işığı",
+            "icon": "mdi:weather-night",
+            "show_state": false,
+            "triggers_update": [
+              "switch.aquareef_pro_4_gun_simulasyonu"
+            ],
+            "tap_action": {
+              "action": "call-service",
+              "service": "aquareef.apply_preset",
+              "service_data": {
+                "preset": "Ay Işığı / Gece (Moonlight)"
+              }
+            },
+            "styles": {
+              "card": [
+                {
+                  "height": "74px"
+                },
+                {
+                  "border-radius": "16px"
+                },
+                {
+                  "padding": "10px 4px"
+                },
+                {
+                  "border": "none"
+                },
+                {
+                  "background": "#edf4fc"
+                },
+                {
+                  "box-shadow": "4px 4px 10px #d5dfec,-4px -4px 10px #fff"
+                }
+              ],
+              "icon": [
+                {
+                  "width": "23px"
+                },
+                {
+                  "color": "#5650ed"
+                }
+              ],
+              "name": [
+                {
+                  "font-size": "11px"
+                },
+                {
+                  "font-weight": "600"
+                },
+                {
+                  "color": "#303456"
+                },
+                {
+                  "white-space": "normal"
+                }
+              ]
+            },
+            "state": [
+              {
+                "operator": "template",
+                "value": "[[[ return entity?.attributes?.mode === \"Ay Işığı / Gece (Moonlight)\"; ]]]",
+                "styles": {
+                  "card": [
+                    {
+                      "background": "#5650ed"
+                    },
+                    {
+                      "box-shadow": "inset 2px 2px 5px #00000020"
+                    }
+                  ],
+                  "icon": [
+                    {
+                      "color": "#ffffff"
+                    }
+                  ],
+                  "name": [
+                    {
+                      "color": "#ffffff"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "type": "custom:button-card",
+            "entity": "light.aquareef_pro_4_ana_aydinlatma_master",
+            "name": "Fotoğraf Çekimi",
+            "icon": "mdi:camera-iris",
+            "show_state": false,
+            "triggers_update": [
+              "switch.aquareef_pro_4_gun_simulasyonu"
+            ],
+            "tap_action": {
+              "action": "call-service",
+              "service": "aquareef.apply_preset",
+              "service_data": {
+                "preset": "Mercan Fotoğraf Çekim"
+              }
+            },
+            "styles": {
+              "card": [
+                {
+                  "height": "74px"
+                },
+                {
+                  "border-radius": "16px"
+                },
+                {
+                  "padding": "10px 4px"
+                },
+                {
+                  "border": "none"
+                },
+                {
+                  "background": "#edf4fc"
+                },
+                {
+                  "box-shadow": "4px 4px 10px #d5dfec,-4px -4px 10px #fff"
+                }
+              ],
+              "icon": [
+                {
+                  "width": "23px"
+                },
+                {
+                  "color": "#ed507d"
+                }
+              ],
+              "name": [
+                {
+                  "font-size": "11px"
+                },
+                {
+                  "font-weight": "600"
+                },
+                {
+                  "color": "#303456"
+                },
+                {
+                  "white-space": "normal"
+                }
+              ]
+            },
+            "state": [
+              {
+                "operator": "template",
+                "value": "[[[ return entity?.attributes?.mode === \"Mercan Fotoğraf Çekim\"; ]]]",
+                "styles": {
+                  "card": [
+                    {
+                      "background": "#ed507d"
+                    },
+                    {
+                      "box-shadow": "inset 2px 2px 5px #00000020"
+                    }
+                  ],
+                  "icon": [
+                    {
+                      "color": "#ffffff"
+                    }
+                  ],
+                  "name": [
+                    {
+                      "color": "#ffffff"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "custom:button-card",
+        "name": "Tüm ayarlar",
+        "label": "Parlaklık · Saatler · Kanallar",
+        "show_label": true,
+        "icon": "mdi:tune-variant",
+        "tap_action": {
+          "action": "fire-dom-event",
+          "browser_mod": {
+            "service": "browser_mod.popup",
+            "data": {
+              "title": "AquaReef · Işık stüdyosu",
+              "initial_style": "wide",
+              "content": {
+                "type": "custom:mod-card",
+                "card_mod": {
+                  "style": "ha-card {background:#e8f0fa;padding:18px;border-radius:26px;--primary-text-color:#202447;--secondary-text-color:#697997;--primary-color:#5650ed;--card-background-color:#edf4fc;--ha-card-background:#edf4fc;--divider-color:#dbe3f1;}"
+                },
+                "card": {
+                  "type": "custom:layout-card",
+                  "layout_type": "custom:grid-layout",
+                  "layout": {
+                    "grid-template-columns": "minmax(0,1fr) minmax(0,1fr)",
+                    "grid-gap": "20px",
+                    "margin": "0",
+                    "mediaquery": {
+                      "(max-width: 650px)": {
+                        "grid-template-columns": "minmax(0,1fr)"
+                      }
+                    }
+                  },
+                  "cards": [
+                    {
+                      "type": "vertical-stack",
+                      "cards": [
+                        {
+                          "type": "tile",
+                          "entity": "light.aquareef_pro_4_ana_aydinlatma_master",
+                          "name": "Ana aydınlatma",
+                          "icon": "mdi:aquarium",
+                          "tap_action": {
+                            "action": "more-info"
+                          },
+                          "icon_tap_action": {
+                            "action": "toggle"
+                          },
+                          "features": [
+                            {
+                              "type": "light-brightness"
+                            }
+                          ],
+                          "card_mod": {
+                            "style": "ha-card {background:#edf4fc;color:#202447;border:0;border-radius:20px;box-shadow:6px 6px 16px #d5dfec,-6px -6px 16px #ffffff;--primary-text-color:#202447;--secondary-text-color:#697997;--primary-color:#5650ed;--accent-color:#5650ed;--ha-card-background:#edf4fc;--card-background-color:#edf4fc;}"
+                          }
+                        },
+                        {
+                          "type": "entities",
+                          "title": "Işık ve çalışma modu",
+                          "show_header_toggle": false,
+                          "entities": [
+                            {
+                              "entity": "select.aquareef_pro_4_calisma_modu_efekt",
+                              "name": "IÅŸÄ±k modu"
+                            },
+                            {
+                              "entity": "switch.aquareef_pro_4_gun_simulasyonu",
+                              "name": "GÃ¼n simÃ¼lasyonu"
+                            },
+                            {
+                              "entity": "select.akvaryum_kontrolu_gun_simulasyonu_profili",
+                              "name": "SimÃ¼lasyon profili"
+                            }
+                          ],
+                          "card_mod": {
+                            "style": "ha-card {background:#edf4fc;color:#202447;border:0;border-radius:20px;box-shadow:6px 6px 16px #d5dfec,-6px -6px 16px #ffffff;--primary-text-color:#202447;--secondary-text-color:#697997;--primary-color:#5650ed;--accent-color:#5650ed;--ha-card-background:#edf4fc;--card-background-color:#edf4fc;}"
+                          }
+                        },
+                        {
+                          "type": "entities",
+                          "title": "GÃ¼n simÃ¼lasyonu saatleri",
+                          "show_header_toggle": false,
+                          "entities": [
+                            {
+                              "entity": "select.akvaryum_kontrolu_gun_simulasyonu_baslangic_saati",
+                              "name": "GÃ¼n doÄŸumu"
+                            },
+                            {
+                              "entity": "select.akvaryum_kontrolu_gun_simulasyonu_kapanis_saati",
+                              "name": "GÃ¼n batÄ±mÄ±"
+                            },
+                            {
+                              "entity": "select.akvaryum_kontrolu_gece_ay_isigi_bitis_saati",
+                              "name": "Ay Ä±ÅŸÄ±ÄŸÄ± bitiÅŸi"
+                            },
+                            {
+                              "entity": "number.akvaryum_kontrolu_gun_dogumu_batimi_gecis_suresi",
+                              "name": "GeÃ§iÅŸ sÃ¼resi"
+                            },
+                            {
+                              "entity": "number.akvaryum_kontrolu_gece_ay_isigi_seviyesi",
+                              "name": "Ay Ä±ÅŸÄ±ÄŸÄ± seviyesi"
+                            }
+                          ],
+                          "card_mod": {
+                            "style": "ha-card {background:#edf4fc;color:#202447;border:0;border-radius:20px;box-shadow:6px 6px 16px #d5dfec,-6px -6px 16px #ffffff;--primary-text-color:#202447;--secondary-text-color:#697997;--primary-color:#5650ed;--accent-color:#5650ed;--ha-card-background:#edf4fc;--card-background-color:#edf4fc;}"
+                          }
+                        },
+                        {
+                          "type": "entities",
+                          "title": "Saat programÄ±",
+                          "show_header_toggle": false,
+                          "entities": [
+                            {
+                              "entity": "switch.akvaryum_kontrolu_manuel_saat_programi",
+                              "name": "Saat programÄ±nÄ± kullan"
+                            }
+                          ],
+                          "card_mod": {
+                            "style": "ha-card {background:#edf4fc;color:#202447;border:0;border-radius:20px;box-shadow:6px 6px 16px #d5dfec,-6px -6px 16px #ffffff;--primary-text-color:#202447;--secondary-text-color:#697997;--primary-color:#5650ed;--accent-color:#5650ed;--ha-card-background:#edf4fc;--card-background-color:#edf4fc;}"
+                          }
+                        },
+                        {
+                          "type": "entities",
+                          "title": "Efektler",
+                          "show_header_toggle": false,
+                          "entities": [
+                            {
+                              "entity": "switch.aquareef_pro_4_bulut_efekti",
+                              "name": "Bulut geçişi"
+                            },
+                            {
+                              "entity": "switch.aquareef_pro_4_firtina_simsek_efekti",
+                              "name": "Fırtına / şimşek"
+                            }
+                          ],
+                          "card_mod": {
+                            "style": "ha-card {background:#edf4fc;color:#202447;border:0;border-radius:20px;box-shadow:6px 6px 16px #d5dfec,-6px -6px 16px #ffffff;--primary-text-color:#202447;--secondary-text-color:#697997;--primary-color:#5650ed;--accent-color:#5650ed;--ha-card-background:#edf4fc;--card-background-color:#edf4fc;}"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "vertical-stack",
+                      "cards": [
+                        {
+                          "type": "entities",
+                          "title": "Manuel kanallar",
+                          "show_header_toggle": false,
+                          "entities": [
+                            {
+                              "entity": "number.akvaryum_kontrolu_seviye_royal_blue",
+                              "name": "Royal Blue"
+                            },
+                            {
+                              "entity": "number.akvaryum_kontrolu_seviye_mavi_blue",
+                              "name": "Mavi"
+                            },
+                            {
+                              "entity": "number.akvaryum_kontrolu_seviye_beyaz_white",
+                              "name": "Beyaz"
+                            },
+                            {
+                              "entity": "number.akvaryum_kontrolu_seviye_uv_mor",
+                              "name": "UV"
+                            },
+                            {
+                              "entity": "number.akvaryum_kontrolu_seviye_menekse_violet",
+                              "name": "MenekÅŸe"
+                            },
+                            {
+                              "entity": "number.akvaryum_kontrolu_seviye_kirmizi_red",
+                              "name": "KÄ±rmÄ±zÄ±"
+                            },
+                            {
+                              "entity": "number.akvaryum_kontrolu_seviye_amber_yesil",
+                              "name": "Amber / YeÅŸil"
+                            },
+                            {
+                              "entity": "number.akvaryum_kontrolu_seviye_nane_mint",
+                              "name": "Nane"
+                            },
+                            {
+                              "entity": "number.akvaryum_kontrolu_seviye_turkuaz_cyan",
+                              "name": "Turkuaz"
+                            },
+                            {
+                              "entity": "button.akvaryum_kontrolu_ozel_spektrum_olarak_kaydet",
+                              "name": "Ã–zel spektrumu kaydet"
+                            }
+                          ],
+                          "card_mod": {
+                            "style": "ha-card {background:#edf4fc;color:#202447;border:0;border-radius:20px;box-shadow:6px 6px 16px #d5dfec,-6px -6px 16px #ffffff;--primary-text-color:#202447;--secondary-text-color:#697997;--primary-color:#5650ed;--accent-color:#5650ed;--ha-card-background:#edf4fc;--card-background-color:#edf4fc;}"
+                          }
+                        },
+                        {
+                          "type": "entities",
+                          "title": "Sabah",
+                          "show_header_toggle": false,
+                          "entities": [
+                            {
+                              "entity": "select.akvaryum_kontrolu_1_dilim_sabah_saat_araligi",
+                              "name": "Saat"
+                            },
+                            {
+                              "entity": "select.akvaryum_kontrolu_1_dilim_sabah_yanan_isik",
+                              "name": "IÅŸÄ±k"
+                            },
+                            {
+                              "entity": "number.akvaryum_kontrolu_1_dilim_sabah_parlakligi",
+                              "name": "ParlaklÄ±k"
+                            }
+                          ],
+                          "card_mod": {
+                            "style": "ha-card {background:#edf4fc;color:#202447;border:0;border-radius:20px;box-shadow:6px 6px 16px #d5dfec,-6px -6px 16px #ffffff;--primary-text-color:#202447;--secondary-text-color:#697997;--primary-color:#5650ed;--accent-color:#5650ed;--ha-card-background:#edf4fc;--card-background-color:#edf4fc;}"
+                          }
+                        },
+                        {
+                          "type": "entities",
+                          "title": "Ã–ÄŸle",
+                          "show_header_toggle": false,
+                          "entities": [
+                            {
+                              "entity": "select.akvaryum_kontrolu_2_dilim_ogle_saat_araligi",
+                              "name": "Saat"
+                            },
+                            {
+                              "entity": "select.akvaryum_kontrolu_2_dilim_ogle_yanan_isik",
+                              "name": "IÅŸÄ±k"
+                            },
+                            {
+                              "entity": "number.akvaryum_kontrolu_2_dilim_ogle_parlakligi",
+                              "name": "ParlaklÄ±k"
+                            }
+                          ],
+                          "card_mod": {
+                            "style": "ha-card {background:#edf4fc;color:#202447;border:0;border-radius:20px;box-shadow:6px 6px 16px #d5dfec,-6px -6px 16px #ffffff;--primary-text-color:#202447;--secondary-text-color:#697997;--primary-color:#5650ed;--accent-color:#5650ed;--ha-card-background:#edf4fc;--card-background-color:#edf4fc;}"
+                          }
+                        },
+                        {
+                          "type": "entities",
+                          "title": "AkÅŸam",
+                          "show_header_toggle": false,
+                          "entities": [
+                            {
+                              "entity": "select.akvaryum_kontrolu_3_dilim_aksam_saat_araligi",
+                              "name": "Saat"
+                            },
+                            {
+                              "entity": "select.akvaryum_kontrolu_3_dilim_aksam_yanan_isik",
+                              "name": "IÅŸÄ±k"
+                            },
+                            {
+                              "entity": "number.akvaryum_kontrolu_3_dilim_aksam_parlakligi",
+                              "name": "ParlaklÄ±k"
+                            }
+                          ],
+                          "card_mod": {
+                            "style": "ha-card {background:#edf4fc;color:#202447;border:0;border-radius:20px;box-shadow:6px 6px 16px #d5dfec,-6px -6px 16px #ffffff;--primary-text-color:#202447;--secondary-text-color:#697997;--primary-color:#5650ed;--accent-color:#5650ed;--ha-card-background:#edf4fc;--card-background-color:#edf4fc;}"
+                          }
+                        },
+                        {
+                          "type": "entities",
+                          "title": "Gece",
+                          "show_header_toggle": false,
+                          "entities": [
+                            {
+                              "entity": "select.akvaryum_kontrolu_4_dilim_gece_saat_araligi",
+                              "name": "Saat"
+                            },
+                            {
+                              "entity": "select.akvaryum_kontrolu_4_dilim_gece_yanan_isik",
+                              "name": "IÅŸÄ±k"
+                            },
+                            {
+                              "entity": "number.akvaryum_kontrolu_4_dilim_gece_parlakligi",
+                              "name": "ParlaklÄ±k"
+                            }
+                          ],
+                          "card_mod": {
+                            "style": "ha-card {background:#edf4fc;color:#202447;border:0;border-radius:20px;box-shadow:6px 6px 16px #d5dfec,-6px -6px 16px #ffffff;--primary-text-color:#202447;--secondary-text-color:#697997;--primary-color:#5650ed;--accent-color:#5650ed;--ha-card-background:#edf4fc;--card-background-color:#edf4fc;}"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              "style": "--popup-max-width: 1040px; --popup-border-radius: 26px; --popup-background-color: #e8f0fa; --primary-text-color: #202447; --secondary-text-color: #697997;"
+            }
+          }
+        },
+        "styles": {
+          "grid": [
+            {
+              "grid-template-areas": "\"i n\" \"i l\""
+            },
+            {
+              "grid-template-columns": "30px 1fr"
+            }
+          ],
+          "card": [
+            {
+              "height": "48px"
+            },
+            {
+              "background": "#373878"
+            },
+            {
+              "border-radius": "14px"
+            },
+            {
+              "padding": "8px 14px"
+            },
+            {
+              "border": "0"
+            },
+            {
+              "box-shadow": "none"
+            }
+          ],
+          "icon": [
+            {
+              "width": "21px"
+            },
+            {
+              "color": "#d6d9ff"
+            }
+          ],
+          "name": [
+            {
+              "justify-self": "start"
+            },
+            {
+              "font-size": "13px"
+            },
+            {
+              "color": "#fff"
+            },
+            {
+              "font-weight": "600"
+            }
+          ],
+          "label": [
+            {
+              "justify-self": "start"
+            },
+            {
+              "font-size": "10px"
+            },
+            {
+              "color": "#c1c6ed"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

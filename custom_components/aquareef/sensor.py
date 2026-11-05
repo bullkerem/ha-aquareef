@@ -313,5 +313,5 @@ class AquaReefTcpStatusSensor(AquaReefBaseSensor):
     def native_value(self) -> str:
         """Return socket status."""
         if self.coordinator.data and self.coordinator.data.get("tcp_connected"):
-            return "Aktif (Port 8899 Dinliyor)"
-        return "Bağlantı Yok"
+            return "Son TCP gönderimi başarılı"
+        return "TCP doğrulanmadı / son gönderim başarısız"
