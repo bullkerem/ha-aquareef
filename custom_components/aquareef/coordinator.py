@@ -230,6 +230,15 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             self.simulation_enabled = bool(stored.get("simulation_enabled", self.simulation_enabled))
             prof = stored.get("simulation_profile")
+            # Map legacy profile names to the new World-Standard profile names automatically
+            legacy_map = {
+                "1. Karışık Resif (Mixed Reef)": SIMULATION_PROFILE_NAMES[0],
+                "2. SPS Mercan (Yüksek PAR & UV)": SIMULATION_PROFILE_NAMES[0],
+                "3. LPS & Soft (Derin Mavi Floresan)": SIMULATION_PROFILE_NAMES[2],
+                "4. Doğal Gün Işığı (Balık & Bitki)": SIMULATION_PROFILE_NAMES[3],
+            }
+            if prof in legacy_map:
+                prof = legacy_map[prof]
             if prof in SIMULATION_PROFILES:
                 self.simulation_profile = prof
 
@@ -303,42 +312,54 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if ramp * 4 > total_day:
             ramp = max(10, total_day // 4)
 
-        # Build key spectra from the selected profile's peak
+        # Build world-standard multi-stage reef spectra (CoralLab AB+ / Saxby / WWC methodology):
+        # Dawn & Evening keep White/Red/Green suppressed to prevent nuisance algae and maximize coral fluorescence.
         zero_ch = {k: 0 for k in CHANNEL_ORDER}
         dawn_ch = {
-            "red": int(round(peak["red"] * 0.35)),
-            "green": int(round(peak["green"] * 0.20)),
-            "royal_blue": int(round(peak["royal_blue"] * 0.45)),
-            "blue": int(round(peak["blue"] * 0.35)),
-            "white": int(round(peak["white"] * 0.15)),
-            "uv": int(round(peak["uv"] * 0.30)),
-            "mint": int(round(peak["mint"] * 0.15)),
+            "red": 0,
+            "green": 0,
+            "royal_blue": int(round(peak["royal_blue"] * 0.50)),
+            "blue": int(round(peak["blue"] * 0.40)),
+            "white": 0,
+            "uv": int(round(peak["uv"] * 0.45)),
+            "mint": 0,
             "cyan": int(round(peak["cyan"] * 0.25)),
-            "violet": int(round(peak["violet"] * 0.35)),
+            "violet": int(round(peak["violet"] * 0.50)),
         }
-        morning_ch = {k: int(round(peak[k] * 0.78)) for k in CHANNEL_ORDER}
+        morning_ch = {
+            "red": int(round(peak["red"] * 0.70)),
+            "green": int(round(peak["green"] * 0.70)),
+            "royal_blue": int(round(peak["royal_blue"] * 0.90)),
+            "blue": int(round(peak["blue"] * 0.85)),
+            "white": int(round(peak["white"] * 0.75)),
+            "uv": int(round(peak["uv"] * 0.85)),
+            "mint": int(round(peak["mint"] * 0.75)),
+            "cyan": int(round(peak["cyan"] * 0.80)),
+            "violet": int(round(peak["violet"] * 0.90)),
+        }
         peak_ch = peak.copy()
+        # Evening Fluorescence Show (Golden Actinic Hour): White/Red/Green drop out while Blue/UV/Violet pop
         afternoon_ch = {
-            "red": int(round(peak["red"] * 0.80)),
-            "green": int(round(peak["green"] * 0.55)),
-            "royal_blue": int(round(peak["royal_blue"] * 0.80)),
-            "blue": int(round(peak["blue"] * 0.70)),
-            "white": int(round(peak["white"] * 0.45)),
-            "uv": int(round(peak["uv"] * 0.65)),
-            "mint": int(round(peak["mint"] * 0.45)),
-            "cyan": int(round(peak["cyan"] * 0.60)),
-            "violet": int(round(peak["violet"] * 0.75)),
+            "red": int(round(peak["red"] * 0.15)),
+            "green": int(round(peak["green"] * 0.10)),
+            "royal_blue": int(round(peak["royal_blue"] * 0.92)),
+            "blue": int(round(peak["blue"] * 0.82)),
+            "white": int(round(peak["white"] * 0.15)),
+            "uv": int(round(peak["uv"] * 0.88)),
+            "mint": int(round(peak["mint"] * 0.25)),
+            "cyan": int(round(peak["cyan"] * 0.55)),
+            "violet": int(round(peak["violet"] * 0.95)),
         }
         sunset_ch = {
-            "red": max(10, int(round(peak["red"] * 0.70))),
-            "green": int(round(peak["green"] * 0.25)),
-            "royal_blue": int(round(peak["royal_blue"] * 0.45)),
-            "blue": int(round(peak["blue"] * 0.35)),
-            "white": int(round(peak["white"] * 0.08)),
+            "red": 0,
+            "green": 0,
+            "royal_blue": int(round(peak["royal_blue"] * 0.35)),
+            "blue": int(round(peak["blue"] * 0.25)),
+            "white": 0,
             "uv": int(round(peak["uv"] * 0.25)),
-            "mint": int(round(peak["mint"] * 0.10)),
-            "cyan": int(round(peak["cyan"] * 0.20)),
-            "violet": int(round(peak["violet"] * 0.40)),
+            "mint": 0,
+            "cyan": int(round(peak["cyan"] * 0.15)),
+            "violet": int(round(peak["violet"] * 0.35)),
         }
 
         moon_lvl = max(0, min(30, self.sim_moon_level))
@@ -375,19 +396,20 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Check daytime phases [t0 .. t5]
         if t0 <= minute_now < t1:
-            return lerp_dict(zero_ch, dawn_ch, (minute_now - t0) / float(max(1, t1 - t0))), "🌅 Gün Doğumu (Şafak)"
+            return lerp_dict(zero_ch, dawn_ch, (minute_now - t0) / float(max(1, t1 - t0))), "🌅 Aktinik Şafak (Uyanış)"
         if t1 <= minute_now < t2:
-            return lerp_dict(dawn_ch, morning_ch, (minute_now - t1) / float(max(1, t2 - t1))), "🌤️ Kuşluk Vakti"
+            return lerp_dict(dawn_ch, morning_ch, (minute_now - t1) / float(max(1, t2 - t1))), "🌤️ Sabah Yükselişi (AB+)"
         if t2 <= minute_now < t3:
             # Smooth rise to peak in first 20% of midday
             mid_span = max(1, t3 - t2)
-            if minute_now - t2 < mid_span * 0.25:
-                return lerp_dict(morning_ch, peak_ch, (minute_now - t2) / float(mid_span * 0.25)), "☀️ Gün Ortası (Zirve)"
-            return peak_ch.copy(), "☀️ Gün Ortası (Zirve)"
+            if minute_now - t2 < mid_span * 0.20:
+                return lerp_dict(morning_ch, peak_ch, (minute_now - t2) / float(mid_span * 0.20)), "☀️ CoralLab AB+ Zirve (Fotosentez)"
+            return peak_ch.copy(), "☀️ CoralLab AB+ Zirve (Fotosentez)"
         if t3 <= minute_now < t4:
-            return lerp_dict(peak_ch, afternoon_ch, (minute_now - t3) / float(max(1, t4 - t3))), "⛅ İkindi Vakti"
+            return lerp_dict(peak_ch, afternoon_ch, (minute_now - t3) / float(max(1, t4 - t3))), "🟣 Akşam Floresan Şov (Aktinik)"
         if t4 <= minute_now < t5:
-            return lerp_dict(afternoon_ch, sunset_ch, (minute_now - t4) / float(max(1, t5 - t4))), "🌇 Gün Batımı"
+            end_target = moon_ch if has_moon else zero_ch
+            return lerp_dict(afternoon_ch, end_target, (minute_now - t4) / float(max(1, t5 - t4))), "🌇 Gün Batımı (Kapanış Rampası)"
 
         # Night / Moonlight check outside [t0 .. t5)
         if has_moon:
@@ -395,6 +417,10 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return moon_ch, "🌙 Gece / Ay Işığı"
             moon_end_min = parse_hhmm_to_minutes(self.sim_moon_end_time, 1410)
             if is_minute_in_window(minute_now, t5, moon_end_min):
+                # Smooth 30-minute fade-out to 0% before moon_end_min
+                mins_left = (moon_end_min - minute_now) % 1440
+                if 0 < mins_left <= 30:
+                    return lerp_dict(zero_ch, moon_ch, mins_left / 30.0), "🌙 Ay Işığı (Kapanış Rampası)"
                 return moon_ch, "🌙 Gece / Ay Işığı"
 
         return zero_ch, "🌙 Gece Dinlenmesi (Kapalı)"
@@ -477,10 +503,14 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         phase_changed = phase != self._last_sim_synced_phase
         power_changed = new_is_on != old_is_on
-        periodic_due = max_channel_diff >= 1
+        keepalive_due = new_is_on and (now_ts - self._last_sim_hw_sync_ts >= 600)
+        periodic_due = max_channel_diff >= 1 or keepalive_due
 
         if phase_changed or power_changed or periodic_due:
-            await self._async_sync_hardware(force_send=power_changed)
+            await self._async_sync_hardware(
+                force_send=(power_changed or keepalive_due),
+                ensure_manual_mode=keepalive_due,
+            )
             self._last_sim_synced_phase = phase
             self._last_sim_hw_sync_ts = now_ts
 
@@ -641,6 +671,7 @@ class AquaReefCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.schedule_enabled = False
             self.storm_enabled = False
             self.current_mode = "Gün Simülasyonu"
+            self.master_brightness = 255
             local_now = dt_util.now()
             minute_of_day = local_now.hour * 60 + local_now.minute
             calc_ch, phase = self.compute_simulation_channels(minute_of_day)

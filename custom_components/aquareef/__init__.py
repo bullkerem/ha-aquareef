@@ -102,9 +102,23 @@ SERVICE_SET_SCHEDULE_SLOT_SCHEMA = vol.Schema(
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up AquaReef from a config entry."""
+    import importlib
+    import sys
+
+    for mod_name in (
+        "custom_components.aquareef.const",
+        "custom_components.aquareef.coordinator",
+        "custom_components.aquareef.select",
+        "custom_components.aquareef.button",
+    ):
+        if mod_name in sys.modules:
+            importlib.reload(sys.modules[mod_name])
+
+    from .coordinator import AquaReefCoordinator as ReloadedCoordinator
+
     hass.data.setdefault(DOMAIN, {})
 
-    coordinator = AquaReefCoordinator(
+    coordinator = ReloadedCoordinator(
         hass=hass,
         host=entry.data[CONF_HOST],
         port=entry.data.get(CONF_PORT, DEFAULT_PORT),

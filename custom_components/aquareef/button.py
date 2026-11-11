@@ -31,10 +31,10 @@ QUICK_PRESETS = [
 ]
 
 SIM_PROFILE_BUTTONS = [
-    ("sim_secenek_1", "Simülasyon Seçenek 1: Karışık Resif", "mdi:fishbowl", SIMULATION_PROFILE_NAMES[0]),
-    ("sim_secenek_2", "Simülasyon Seçenek 2: SPS Mercan", "mdi:flare", SIMULATION_PROFILE_NAMES[1]),
-    ("sim_secenek_3", "Simülasyon Seçenek 3: LPS & Floresan", "mdi:jellyfish", SIMULATION_PROFILE_NAMES[2]),
-    ("sim_secenek_4", "Simülasyon Seçenek 4: Doğal Gün Işığı", "mdi:white-balance-sunny", SIMULATION_PROFILE_NAMES[3]),
+    ("sim_secenek_1", "Simülasyon Seçenek 1: EcoTech CoralLab AB+", "mdi:dna", SIMULATION_PROFILE_NAMES[0]),
+    ("sim_secenek_2", "Simülasyon Seçenek 2: David Saxby İmza", "mdi:waves-arrow-up", SIMULATION_PROFILE_NAMES[1]),
+    ("sim_secenek_3", "Simülasyon Seçenek 3: WWC Derin Mavi", "mdi:jellyfish", SIMULATION_PROFILE_NAMES[2]),
+    ("sim_secenek_4", "Simülasyon Seçenek 4: Doğal Tropikal 14K", "mdi:white-balance-sunny", SIMULATION_PROFILE_NAMES[3]),
 ]
 
 
