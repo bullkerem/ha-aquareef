@@ -1,8 +1,14 @@
-# 🐠 AquaReef PRO 4 Akvaryum Aydınlatması — Home Assistant Entegrasyonu (v2.2)
+# 🐠 AquaReef PRO 4 Akvaryum Aydınlatması — Home Assistant Entegrasyonu (v2.2.1)
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
-[![GitHub Release](https://img.shields.io/github/v/release/bullkerem/ha-aquareef?color=blue)](https://github.com/bullkerem/ha-aquareef/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GitHub Release](https://img.shields.io/github/v/release/bullkerem/ha-aquareef?style=for-the-badge&color=brightgreen)](https://github.com/bullkerem/ha-aquareef/releases)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge&logo=homeassistantcommunitystore&logoColor=white)](https://github.com/hacs/integration)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1%2B-18BCF2.svg?style=for-the-badge&logo=homeassistant&logoColor=white)](https://www.home-assistant.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/bullkerem/ha-aquareef?style=for-the-badge&color=yellow)](https://github.com/bullkerem/ha-aquareef/stargazers)
+[![GitHub Issues](https://img.shields.io/github/issues/bullkerem/ha-aquareef?style=for-the-badge&color=orange)](https://github.com/bullkerem/ha-aquareef/issues)
+[![Last Commit](https://img.shields.io/github/last-commit/bullkerem/ha-aquareef?style=for-the-badge&color=purple)](https://github.com/bullkerem/ha-aquareef/commits/main)
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=bullkerem&repository=ha-aquareef&category=integration)
 
 **AquaReef** akıllı akvaryum LED armatürlerinin (**AquaReef PRO 4**, PRO 3, PRO 2, F Serisi ve High-Flying `HF-LPT170` tabanlı kontrolcüler) Home Assistant üzerinden **%100 yerel (local)** olarak kontrol edilmesi, **Dünya Standardı Resif Aydınlatma Otomasyonu (EcoTech CoralLab AB+ / David Saxby / WWC)**, **4 Zaman Dilimli Manuel Saat Programı** ve **9 Kanal Spektrum Kontrolü** için geliştirilmiş özel entegrasyondur.
 
@@ -283,6 +289,17 @@ cards:
 | `aquareef.set_schedule_slot` | Manuel Saat Programındaki `1..4` numaralı dilimin saat aralığını (`time_range`), ışık kombinasyonunu (`light_preset`) ve parlaklığını (`brightness`) ayarlar. |
 | `aquareef.send_raw_command` | Port 8899 üzerinden doğrudan HEX veya ASCII komut iletir. |
 | `aquareef.reboot` | Armatürün Wi-Fi modülünü yeniden başlatır. |
+
+---
+
+## 🆕 Sürüm Geçmişi / Changelog
+
+### v2.2.1
+- 🏷️ Dinamik GitHub Release, HACS Custom, Home Assistant (`2024.1+`), License MIT, Yıldız, Sorun, Son Commit rozetleri ve tek tıkla **My Home Assistant (HACS)** kurulum butonu eklendi.
+- 📦 `manifest.json` sürümü `2.2.1` olarak güncellendi.
+
+### v2.2.0
+- 🌍 Dünya Standardı EcoTech CoralLab AB+, David Saxby, WWC ve 14K programları, 1 dakikalık yumuşak rampa ve genişletilmiş Lovelace popup kartı.
 
 ---
 
